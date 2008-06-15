@@ -1,5 +1,6 @@
 /*
  * Copyright 2004 Richard Wilson <not_ginger_matt@users.sourceforge.net>
+ * Copyright 2008 Sean Fox <dyntryx@gmail.com>
  *
  * This file is part of NetSurf, http://www.netsurf-browser.org/
  *
@@ -20,8 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "gifread.h"
-#include "image/bitmap.h"
+#include "libnsgif.h"
 #include "utils/log.h"
 
 /*	READING GIF FILES
@@ -67,8 +67,8 @@
 
 /*	Internal GIF routines
 */
-static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height);
-static int gif_initialise_frame(struct gif_animation *gif);
+static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height, bitmap_callback_vt *bitmap_callbacks);
+static int gif_initialise_frame(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks);
 static unsigned int gif_interlaced_line(int height, int y);
 
 
@@ -116,7 +116,7 @@ static bool clear_image = false;
 		0 for successful decoding
 		1 for successful decoding (all frames completely read)
 */
-int gif_initialise(struct gif_animation *gif) {
+int gif_initialise(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks) {
 	unsigned char *gif_data;
 	unsigned int index;
 	int return_value;
@@ -195,7 +195,7 @@ int gif_initialise(struct gif_animation *gif) {
 		gif->global_colour_table = (unsigned int *)calloc(GIF_MAX_COLOURS, sizeof(int));
 		gif->local_colour_table = (unsigned int *)calloc(GIF_MAX_COLOURS, sizeof(int));
 		if ((gif->global_colour_table == NULL) || (gif->local_colour_table == NULL)) {
-			gif_finalise(gif);
+			gif_finalise(gif, bitmap_callbacks);
 			return GIF_INSUFFICIENT_MEMORY;
 		}
 
@@ -204,18 +204,18 @@ int gif_initialise(struct gif_animation *gif) {
 		*/
 		gif->global_colour_table[0] = 0xaa000000;
 
-		/*	Initialise enough workspace for 4 frame initially
+		/*	Initialise enough workspace for 4 frames initially
 		*/
 		if ((gif->frames = (gif_frame *)malloc(sizeof(gif_frame))) == NULL) {
-			gif_finalise(gif);
+			gif_finalise(gif, bitmap_callbacks);
 			return GIF_INSUFFICIENT_MEMORY;
 		}
 		gif->frame_holders = 1;
 
 		/*	Initialise the sprite header
 		*/
-		if ((gif->frame_image = bitmap_create(gif->width, gif->height, BITMAP_NEW)) == NULL) {
-			gif_finalise(gif);
+		if ((gif->frame_image = bitmap_callbacks->bitmap_create(gif->width, gif->height)) == NULL) {
+			gif_finalise(gif, bitmap_callbacks);
 			return GIF_INSUFFICIENT_MEMORY;
 		}
 
@@ -235,7 +235,7 @@ int gif_initialise(struct gif_animation *gif) {
 				return GIF_INSUFFICIENT_DATA;
 			}
 			for (index = 0; index < gif->colour_table_size; index++) {
-				char colour[] = {gif_data[0], gif_data[1], gif_data[2], 0xff};
+				char colour[] = {gif_data[0], gif_data[1], gif_data[2], (char)0xff};
 				gif->global_colour_table[index] = *((int *) colour);
 				gif_data += 3;
 			}
@@ -250,7 +250,7 @@ int gif_initialise(struct gif_animation *gif) {
 
 	/*	Repeatedly try to decode frames
 	*/
-	while ((return_value = gif_initialise_frame(gif)) == 0);
+	while ((return_value = gif_initialise_frame(gif, bitmap_callbacks)) == 0);
 
 	/*	If there was a memory error tell the caller
 	*/
@@ -276,7 +276,7 @@ int gif_initialise(struct gif_animation *gif) {
 	@return -3 for a memory error
 		0 for success
 */
-static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height) {
+static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height, bitmap_callback_vt *bitmap_callbacks) {
 	unsigned int max_width;
 	unsigned int max_height;
 	struct bitmap *buffer;
@@ -293,9 +293,9 @@ static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, 
 
 	/*	Allocate some more memory
 	*/
-	if ((buffer = bitmap_create(max_width, max_height, BITMAP_NEW)) == NULL)
+	if ((buffer = bitmap_callbacks->bitmap_create(max_width, max_height)) == NULL)
 		return GIF_INSUFFICIENT_MEMORY;
-	bitmap_destroy(gif->frame_image);
+	bitmap_callbacks->bitmap_destroy(gif->frame_image);
 	gif->frame_image = buffer;
 	gif->width = max_width;
 	gif->height = max_height;
@@ -316,7 +316,7 @@ static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, 
 		0 for success
 		1 for success (GIF terminator found)
 */
-int gif_initialise_frame(struct gif_animation *gif) {
+int gif_initialise_frame(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks) {
 	int frame;
 	gif_frame *temp_buf;
 
@@ -472,7 +472,7 @@ int gif_initialise_frame(struct gif_animation *gif) {
 
 		/*	Boundary checking - shouldn't ever happen except with junk data
 		*/
-		if (gif_initialise_sprite(gif, (offset_x + width), (offset_y + height)))
+		if (gif_initialise_sprite(gif, (offset_x + width), (offset_y + height), bitmap_callbacks))
 			return GIF_INSUFFICIENT_MEMORY;
 
 		/*	Decode the flags
@@ -543,7 +543,7 @@ int gif_initialise_frame(struct gif_animation *gif) {
 		GIF_INSUFFICIENT_DATA for insufficient data to do anything
 		0 for successful decoding
 */
-int gif_decode_frame(struct gif_animation *gif, unsigned int frame) {
+int gif_decode_frame(struct gif_animation *gif, unsigned int frame, bitmap_callback_vt *bitmap_callbacks) {
 	unsigned int index = 0;
 	unsigned char *gif_data;
 	unsigned char *gif_end;
@@ -578,7 +578,7 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame) {
 		if (gif->decoded_frame == gif->dirty_frame) {
 			clear_image = true;
 			if (frame != 0)
-				gif_decode_frame(gif, gif->dirty_frame);
+				gif_decode_frame(gif, gif->dirty_frame, bitmap_callbacks);
 			clear_image = false;
 		}
 		gif->dirty_frame = -1;
@@ -599,7 +599,7 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame) {
 		sprite and clear what we need as some frames have multiple images which would
 		produce errors.
 	*/
-	frame_data = (unsigned int *)bitmap_get_buffer(gif->frame_image);
+	frame_data = (unsigned int *)bitmap_callbacks->bitmap_get_buffer(gif->frame_image);
 	if (!frame_data)
 		return GIF_INSUFFICIENT_MEMORY;
 	if (!clear_image) {
@@ -706,7 +706,7 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame) {
 			if (!clear_image) {
 				for (index = 0; index < colour_table_size; index++) {
 					char colour[] = {gif_data[0], gif_data[1],
-							gif_data[2], 0xff};
+							gif_data[2], (char)0xff};
 					colour_table[index] = *((int *) colour);
 					gif_data += 3;
 				}
@@ -814,11 +814,11 @@ gif_decode_frame_exit:
 	/*	Check if we should test for optimisation
 	*/
 	if (gif->frames[frame].virgin) {
-		gif->frames[frame].opaque = bitmap_test_opaque(gif->frame_image);
+		gif->frames[frame].opaque = bitmap_callbacks->bitmap_test_opaque(gif->frame_image);
 		gif->frames[frame].virgin = false;
 	}
-	bitmap_set_opaque(gif->frame_image, gif->frames[frame].opaque);
-	bitmap_modified(gif->frame_image);
+	bitmap_callbacks->bitmap_set_opaque(gif->frame_image, gif->frames[frame].opaque);
+	bitmap_callbacks->bitmap_modified(gif->frame_image);
 
 	/*	Restore the buffer position
 	*/
@@ -842,11 +842,11 @@ static unsigned int gif_interlaced_line(int height, int y) {
 
 /*	Releases any workspace held by the animation
 */
-void gif_finalise(struct gif_animation *gif) {
+void gif_finalise(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks) {
 	/*	Release all our memory blocks
 	*/
 	if (gif->frame_image)
-		bitmap_destroy(gif->frame_image);
+		bitmap_callbacks->bitmap_destroy(gif->frame_image);
 	gif->frame_image = NULL;
 	free(gif->frames);
 	gif->frames = NULL;
