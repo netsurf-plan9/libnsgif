@@ -67,14 +67,14 @@ typedef void (*bitmap_cb_modified)(void *bitmap);
 
 /*	The Bitmap callbacks function table
 */
-typedef struct bitmap_callback_vt_s {
+typedef struct gif_bitmap_callback_vt_s {
 	bitmap_cb_create bitmap_create;		/**< Create a bitmap. */
 	bitmap_cb_destroy bitmap_destroy;		/**< Free a bitmap. */
 	bitmap_cb_get_buffer bitmap_get_buffer;	/**< Return a pointer to the pixel data in a bitmap. */
 	bitmap_cb_set_opaque bitmap_set_opaque;	/**< Sets whether a bitmap should be plotted opaque. */
 	bitmap_cb_test_opaque bitmap_test_opaque;	/**< Tests whether a bitmap has an opaque alpha channel. */
 	bitmap_cb_modified bitmap_modified;		/**< The bitmap image has changed, so flush any persistant cache. */
-} bitmap_callback_vt;
+} gif_bitmap_callback_vt;
 
 /*	The GIF animation data
 */
@@ -101,8 +101,8 @@ typedef struct gif_animation {
 	int current_error;			/**< current error type, or 0 for none*/
 } gif_animation;
 
-int gif_initialise(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks);
-int gif_decode_frame(struct gif_animation *gif, unsigned int frame, bitmap_callback_vt *bitmap_callbacks);
-void gif_finalise(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks);
+int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
+int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_callback_vt *bitmap_callbacks);
+void gif_finalise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
 
 #endif

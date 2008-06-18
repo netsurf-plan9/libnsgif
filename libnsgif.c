@@ -67,8 +67,8 @@
 
 /*	Internal GIF routines
 */
-static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height, bitmap_callback_vt *bitmap_callbacks);
-static int gif_initialise_frame(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks);
+static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height, gif_bitmap_callback_vt *bitmap_callbacks);
+static int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
 static unsigned int gif_interlaced_line(int height, int y);
 
 
@@ -116,7 +116,7 @@ static bool clear_image = false;
 		0 for successful decoding
 		1 for successful decoding (all frames completely read)
 */
-int gif_initialise(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks) {
+int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
 	unsigned char *gif_data;
 	unsigned int index;
 	int return_value;
@@ -276,7 +276,7 @@ int gif_initialise(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbac
 	@return -3 for a memory error
 		0 for success
 */
-static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height, bitmap_callback_vt *bitmap_callbacks) {
+static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height, gif_bitmap_callback_vt *bitmap_callbacks) {
 	unsigned int max_width;
 	unsigned int max_height;
 	struct bitmap *buffer;
@@ -316,7 +316,7 @@ static int gif_initialise_sprite(struct gif_animation *gif, unsigned int width, 
 		0 for success
 		1 for success (GIF terminator found)
 */
-int gif_initialise_frame(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks) {
+int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
 	int frame;
 	gif_frame *temp_buf;
 
@@ -543,7 +543,7 @@ int gif_initialise_frame(struct gif_animation *gif, bitmap_callback_vt *bitmap_c
 		GIF_INSUFFICIENT_DATA for insufficient data to do anything
 		0 for successful decoding
 */
-int gif_decode_frame(struct gif_animation *gif, unsigned int frame, bitmap_callback_vt *bitmap_callbacks) {
+int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_callback_vt *bitmap_callbacks) {
 	unsigned int index = 0;
 	unsigned char *gif_data;
 	unsigned char *gif_end;
@@ -842,7 +842,7 @@ static unsigned int gif_interlaced_line(int height, int y) {
 
 /*	Releases any workspace held by the animation
 */
-void gif_finalise(struct gif_animation *gif, bitmap_callback_vt *bitmap_callbacks) {
+void gif_finalise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
 	/*	Release all our memory blocks
 	*/
 	if (gif->frame_image)
