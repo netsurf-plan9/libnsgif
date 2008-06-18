@@ -58,22 +58,22 @@ typedef struct gif_frame {
 
 /*	API for Bitmap callbacks
 */
-typedef void* (*bitmap_cb_create)(int width, int height);
-typedef void (*bitmap_cb_destroy)(void *bitmap);
-typedef char* (*bitmap_cb_get_buffer)(void *bitmap);
-typedef void (*bitmap_cb_set_opaque)(void *bitmap, bool opaque);
-typedef bool (*bitmap_cb_test_opaque)(void *bitmap);
-typedef void (*bitmap_cb_modified)(void *bitmap);
+typedef void* (*gif_bitmap_cb_create)(int width, int height);
+typedef void (*gif_bitmap_cb_destroy)(void *bitmap);
+typedef char* (*gif_bitmap_cb_get_buffer)(void *bitmap);
+typedef void (*gif_bitmap_cb_set_opaque)(void *bitmap, bool opaque);
+typedef bool (*gif_bitmap_cb_test_opaque)(void *bitmap);
+typedef void (*gif_bitmap_cb_modified)(void *bitmap);
 
 /*	The Bitmap callbacks function table
 */
 typedef struct gif_bitmap_callback_vt_s {
-	bitmap_cb_create bitmap_create;		/**< Create a bitmap. */
-	bitmap_cb_destroy bitmap_destroy;		/**< Free a bitmap. */
-	bitmap_cb_get_buffer bitmap_get_buffer;	/**< Return a pointer to the pixel data in a bitmap. */
-	bitmap_cb_set_opaque bitmap_set_opaque;	/**< Sets whether a bitmap should be plotted opaque. */
-	bitmap_cb_test_opaque bitmap_test_opaque;	/**< Tests whether a bitmap has an opaque alpha channel. */
-	bitmap_cb_modified bitmap_modified;		/**< The bitmap image has changed, so flush any persistant cache. */
+	gif_bitmap_cb_create bitmap_create;		/**< Create a bitmap. */
+	gif_bitmap_cb_destroy bitmap_destroy;		/**< Free a bitmap. */
+	gif_bitmap_cb_get_buffer bitmap_get_buffer;	/**< Return a pointer to the pixel data in a bitmap. */
+	gif_bitmap_cb_set_opaque bitmap_set_opaque;	/**< Sets whether a bitmap should be plotted opaque. */
+	gif_bitmap_cb_test_opaque bitmap_test_opaque;	/**< Tests whether a bitmap has an opaque alpha channel. */
+	gif_bitmap_cb_modified bitmap_modified;		/**< The bitmap image has changed, so flush any persistant cache. */
 } gif_bitmap_callback_vt;
 
 /*	The GIF animation data
