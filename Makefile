@@ -23,7 +23,7 @@ DESTDIR ?=
 
 .PHONY: all clean docs install uninstall
 
-all: libnsgif.a
+all: libnsgif.a bin/decode_gif
 	
 libnsgif.a: libnsgif.o libnsgif.pc
 	${AR} ${ARFLAGS} libnsgif.a libnsgif.o
@@ -33,6 +33,9 @@ libnsgif.pc: libnsgif.pc.in
 
 %.o: %.c
 	${CC} -c ${CFLAGS} -o $@ $<
+
+bin/decode_gif: examples/decode_gif.c libnsgif.a
+	${CC} ${CFLAGS} -o $@ $< libnsgif.a
 
 docs:
 	${DOXYGEN}
