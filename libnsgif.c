@@ -368,7 +368,7 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 
 	/*	Check if we've finished
 	*/
-	if ((gif_bytes > 0) && (gif_data[0] == gif_trailer)) return 1;
+	if ((gif_bytes > 0) && (gif_data[0] == GIF_TRAILER)) return 1;
 	
 	/*	Check if we have enough data
 	 *	The shortest block of data is a 4-byte comment extension + 1-byte block terminator + 1-byte gif trailer
@@ -463,7 +463,7 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 		if (gif_bytes < 1)
 			return GIF_INSUFFICIENT_FRAME_DATA;
 		else
-			if (gif_data[0] == gif_trailer) {
+			if (gif_data[0] == GIF_TRAILER) {
 				gif->buffer_position = gif_data - gif->gif_data;
 				gif->frame_count = frame + 1;
 				return 1;
@@ -785,7 +785,7 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 		if (gif_bytes < 1) {
 			return_value = GIF_INSUFFICIENT_FRAME_DATA;
 			break;
-		} else if (gif_data[0] == gif_trailer) {
+		} else if (gif_data[0] == GIF_TRAILER) {
 			return_value = 1;
 			break;
 		}
@@ -800,7 +800,7 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 				break;
 			/*	If we only have the 1-byte LZW code size + 1-byte gif trailer, we're finished
 			*/
-			} else if ((gif_bytes = 2) && (gif_data[1] == gif_trailer)) {
+			} else if ((gif_bytes = 2) && (gif_data[1] == GIF_TRAILER)) {
 				return_value = 1;
 				break;
 			}
