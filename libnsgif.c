@@ -120,6 +120,10 @@ int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_cal
 	unsigned int index;
 	int return_value;
 
+	/* the gif format is thoroughly documented; a full description
+	 * can be found at http://www.w3.org/Graphics/GIF/spec-gif89a.txt
+	 */
+
 	/*	Check for sufficient data to be a GIF (6-byte header + 7-byte logical screen descriptor)
 	*/
 	if (gif->buffer_size < 13) return GIF_INSUFFICIENT_DATA;
@@ -127,10 +131,6 @@ int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_cal
 	/*	Get our current processing position
 	*/
 	gif_data = gif->gif_data + gif->buffer_position;
-
-	/* the gif format is thoroughly documented; a full description
-	 * can be found at http://www.w3.org/Graphics/GIF/spec-gif89a.txt
-	 */
 
 	/*	See if we should initialise the GIF
 	*/
@@ -219,6 +219,16 @@ int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_cal
 			know if we've processed it
 		*/
 		gif->global_colour_table[0] = 0xaa000000;
+		
+		/*	Check if the GIF has no frame data (13-byte header + 1-byte termination block)
+		 *	Although generally useless, the GIF specification does not expressly prohibit this
+		 */
+		if (gif->buffer_size == 14) {
+			if (gif_data[0] == GIF_TRAILER)
+				return 1;
+			else
+				return GIF_INSUFFICIENT_DATA;
+		}
 
 		/*	Initialise enough workspace for 4 frames initially
 		*/
@@ -356,10 +366,14 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 	gif_end = (unsigned char *)(gif->gif_data + gif->buffer_size);
 	gif_bytes = (gif_end - gif_data);
 
-	/*	Check we have enough data for at least the header, or if we've finished
+	/*	Check if we've finished
 	*/
-	if ((gif_bytes > 0) && (gif_data[0] == GIF_TRAILER)) return 1;
-	if (gif_bytes < 11) return -1;
+	if ((gif_bytes > 0) && (gif_data[0] == gif_trailer)) return 1;
+	
+	/*	Check if we have enough data
+	 *	The shortest block of data is a 4-byte comment extension + 1-byte block terminator + 1-byte gif trailer
+	*/
+	if (gif_bytes < 6) return GIF_INSUFFICIENT_FRAME_DATA;
 
 	/*	We could theoretically get some junk data that gives us millions of frames, so
 		we ensure that we don't have a silly number
@@ -397,11 +411,6 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 	*/
 	while (more_images) {
 
-		/*	Ensure we have some data
-		*/
-		if ((gif_end - gif_data) < 10)
-			return GIF_INSUFFICIENT_FRAME_DATA;
-
 		/*	Decode the extensions
 		*/
 		background_action = 0;
@@ -409,11 +418,6 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 			/*	Get the extension size
 			*/
 			extension_size = gif_data[2];
-
-			/*	Check we've enough data for the extension then header
-			*/
-			if ((gif_end - gif_data) < (int)(extension_size + 13))
-				return GIF_INSUFFICIENT_FRAME_DATA;
 
 			/*	Graphic control extension - store the frame delay.
 			*/
@@ -424,13 +428,14 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 
 			/*	Application extension - handle NETSCAPE2.0 looping
 			*/
-			} else if ((gif_data[1] == 0xff) &&
-					(gif_data[2] == 0x0b) &&
+			} else if (gif_data[1] == 0xff) {
+				if (gif_bytes < 18) return GIF_INSUFFICIENT_FRAME_DATA;
+				if ((gif_data[2] == 0x0b) &&
 					(strncmp((const char *) gif_data + 3, 
 						"NETSCAPE2.0", 11) == 0) &&
 					(gif_data[14] == 0x03) &&
-					(gif_data[15] == 0x01)) {
-				gif->loop_count = gif_data[16] | (gif_data[17] << 8);
+					(gif_data[15] == 0x01))
+						gif->loop_count = gif_data[16] | (gif_data[17] << 8);
 			}
 
 			/*	Move to the first sub-block
@@ -439,14 +444,24 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 
 			/*	Skip all the sub-blocks
 			*/
-			while (gif_data[0] != 0x00) {
+			while (gif_data[0] != 0x00)
 				gif_data += gif_data[0] + 1;
-				if ((gif_end - gif_data) < 10) return GIF_INSUFFICIENT_FRAME_DATA;
-			}
 			gif_data++;
 		}
 
-		/*	We must have at least one image descriptor
+		/*	Check if we've finished
+		*/
+		gif_bytes = (gif_end - gif_data);
+		if (gif_bytes < 1)
+			return GIF_INSUFFICIENT_FRAME_DATA;
+		else
+			if (gif_data[0] == gif_trailer) {
+				gif->buffer_position = gif_data - gif->gif_data;
+				gif->frame_count = frame + 1;
+				return 1;
+			}
+
+		/*	If we're not done, there should be an image descriptor
 		*/
 		if (gif_data[0] != 0x2c) return GIF_FRAME_DATA_ERROR;
 
@@ -515,13 +530,14 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 		if (gif_data[0] > GIF_MAX_LZW)
 			return GIF_DATA_ERROR;
 
-		/*	Move our data onwards
+		/*	Move our pointer to the actual image data
 		*/
 		gif_data++;
 		if (--gif_bytes < 0)
 			return GIF_INSUFFICIENT_FRAME_DATA;
 
 		/*	Repeatedly skip blocks until we get a zero block or run out of data
+		 *	These blocks of image data are processed later by gif_decode_frame()
 		*/
 		block_size = 0;
 		while (block_size != 1) {
@@ -535,6 +551,8 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 
 		/*	Check for end of data
 		*/
+		gif->buffer_position = gif_data - gif->gif_data;
+		gif->frame_count = frame + 1;
 		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
 	}
 
@@ -542,11 +560,8 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 	*/
 	if (gif_bytes < 1)
 		return GIF_INSUFFICIENT_FRAME_DATA;
-	else {
-		gif->buffer_position = gif_data - gif->gif_data;
-		gif->frame_count = frame + 1;
+	else
 		if (gif_data[0] == GIF_TRAILER) return 1;
-	}
 	return 0;
 }
 
@@ -606,10 +621,10 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 	gif_end = gif->gif_data + gif->buffer_size;
 	gif_bytes = (gif_end - gif_data);
 
-	/*	Check we have enough data for the header
+	/*	Check if we have enough data
+	 *	The shortest block of data is a 10-byte image descriptor + 1-byte gif trailer
 	*/
-	if (gif_bytes < 9)
-		return GIF_INSUFFICIENT_DATA;
+	if (gif_bytes < 12) return GIF_INSUFFICIENT_FRAME_DATA;
 
 	/*	Clear the previous frame totally. We can't just pretend we've got a smaller
 		sprite and clear what we need as some frames have multiple images which would
@@ -628,19 +643,12 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 	*/
 	save_buffer_position = gif->buffer_position;
 	gif->buffer_position = gif_data - gif->gif_data;
+	gif_data = gif->gif_data + gif->buffer_position;
 
 	/*	We've got to do this more than one time if we've got multiple images
 	*/
 	while (more_images) {
 		background_action = 0;
-
-		/*	Ensure we have some data
-		*/
-		gif_data = gif->gif_data + gif->buffer_position;
-		if ((gif_end - gif_data) < 10) {
-			return_value = GIF_INSUFFICIENT_FRAME_DATA;
-			break;
-		}
 
 		/*	Decode the extensions
 		*/
@@ -650,35 +658,35 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 			*/
 			extension_size = gif_data[2];
 
-			/*	Check we've enough data for the extension then header
-			*/
-			if ((gif_end - gif_data) < (int)(extension_size + 13)) {
-				return_value = GIF_INSUFFICIENT_FRAME_DATA;
-				break;
-			}
-
 			/*	Graphic control extension - store the frame delay.
 			*/
 			if (gif_data[1] == 0xf9) {
+				if (gif_bytes < 7) {
+					return_value = GIF_INSUFFICIENT_FRAME_DATA;
+					break;
+				}
 				flags = gif_data[3];
 				if (flags & 0x01) transparency_index = gif_data[6];
 				background_action = ((flags & 0x1c) >> 2);
 				more_images = false;
 			}
+
 			/*	Move to the first sub-block
 			*/
 			gif_data += 2;
 
 			/*	Skip all the sub-blocks
 			*/
-			while (gif_data[0] != 0x00) {
+			while (gif_data[0] != 0x00)
 				gif_data += gif_data[0] + 1;
-				if ((gif_end - gif_data) < 10) {
-					return_value = GIF_INSUFFICIENT_FRAME_DATA;
-					break;
-				}
-			}
 			gif_data++;
+		}
+
+		/*	Ensure we have enough data for the 10-byte image descriptor + 1-byte gif trailer
+		*/
+		if ((gif_bytes = (gif_end - gif_data)) < 12) {
+			return_value = GIF_INSUFFICIENT_FRAME_DATA;
+			break;
 		}
 
 		/* 10-byte Image Descriptor is:
@@ -718,10 +726,10 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 		colour_table_size = 2 << (flags & 0x07);
 		interlace = flags & 0x40;
 
-		/*	Move through our data
+		/*	Move our pointer to the colour table or image data (if no colour table is given)
 		*/
 		gif_data += 10;
-		gif_bytes = (int)(gif_end - gif_data);
+		gif_bytes = (gif_end - gif_data);
 
 		/*	Set up the colour table
 		*/
@@ -741,14 +749,36 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 			} else {
 				gif_data += 3 * colour_table_size;
 			}
-			gif_bytes = (int)(gif_end - gif_data);
+			gif_bytes = (gif_end - gif_data);
 		} else {
 			colour_table = gif->global_colour_table;
+		}
+
+		/*	Check if we've finished
+		*/
+		if (gif_bytes < 1) {
+			return_value = GIF_INSUFFICIENT_FRAME_DATA;
+			break;
+		} else if (gif_data[0] == gif_trailer) {
+			return_value = 1;
+			break;
 		}
 
 		/*	If we are clearing the image we just clear, if not decode
 		*/
 		if (!clear_image) {
+			/*	Ensure we have enough data for the 1-byte LZW code size + 1-byte gif trailer
+			*/
+			if (gif_bytes < 2) {
+				return_value = GIF_INSUFFICIENT_FRAME_DATA;
+				break;
+			/*	If we only have the 1-byte LZW code size + 1-byte gif trailer, we're finished
+			*/
+			} else if ((gif_bytes = 2) && (gif_data[1] == gif_trailer)) {
+				return_value = 1;
+				break;
+			}
+
 			/*	Set our dirty status
 			*/
 			if ((background_action == 2) || (background_action == 3))
