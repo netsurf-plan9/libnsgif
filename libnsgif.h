@@ -33,6 +33,7 @@
 #define GIF_INSUFFICIENT_DATA -3
 #define GIF_DATA_ERROR -4
 #define GIF_INSUFFICIENT_MEMORY -5
+#define GIF_FRAME_NO_DISPLAY -6
 
 /*	Maximum colour table size
 */
@@ -42,11 +43,16 @@
 */
 #define GIF_MAX_LZW 12
 
+/* 1-byte GIF Trailer "[indicates] the end of the GIF Data Stream" (fixed value: 0x3b)
+*/
+#define GIF_TRAILER 0x3b
+
 /*	The GIF frame data
 */
 typedef struct gif_frame {
   	unsigned int frame_pointer;		/**< offset (in bytes) to the GIF frame data */
   	unsigned int frame_delay;		/**< delay (in cs) before animating the frame */
+  	bool display;				/**< whether the frame should be displayed/animated */
   	bool virgin;				/**< whether the frame has previously been used */
 	bool opaque;				/**< whether the frame is totally opaque */
 	bool redraw_required;			/**< whether a forcable screen redraw is required */

@@ -102,7 +102,6 @@ static bool get_done;
 */
 static bool clear_image = false;
 
-
 /*	Initialises any workspace held by the animation and attempts to decode
 	any information that hasn't already been decoded.
 	If an error occurs, all previously decoded frames are retained.
@@ -359,7 +358,7 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 
 	/*	Check we have enough data for at least the header, or if we've finished
 	*/
-	if ((gif_bytes > 0) && (gif_data[0] == 0x3b)) return 1;
+	if ((gif_bytes > 0) && (gif_data[0] == GIF_TRAILER)) return 1;
 	if (gif_bytes < 11) return -1;
 
 	/*	We could theoretically get some junk data that gives us millions of frames, so
@@ -536,7 +535,7 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 
 		/*	Check for end of data
 		*/
-		more_images &= !((gif_bytes < 1) || (gif_data[0] == 0x3b));
+		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
 	}
 
 	/*	Check if we've finished
@@ -546,7 +545,7 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 	else {
 		gif->buffer_position = gif_data - gif->gif_data;
 		gif->frame_count = frame + 1;
-		if (gif_data[0] == 0x3b) return 1;
+		if (gif_data[0] == GIF_TRAILER) return 1;
 	}
 	return 0;
 }
@@ -836,7 +835,7 @@ gif_decode_frame_exit:
 		/*	Check for end of data
 		*/
 		gif_bytes = gif->buffer_size - gif->buffer_position;
-		more_images &= !((gif_bytes < 1) || (gif_data[0] == 0x3b));
+		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
 		gif->buffer_position++;
 	}
 
