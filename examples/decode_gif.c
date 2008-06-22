@@ -27,7 +27,7 @@
 #include <libnsgif.h>
 
 char *load_file(const char *path, size_t *data_size);
-void die(const char *context, int code);
+void warning(const char *context, int code);
 void *bitmap_create(int width, int height);
 void bitmap_set_opaque(void *bitmap, bool opaque);
 bool bitmap_test_opaque(void *bitmap);
@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
 	do {
 		code = gif_initialise(&gif, &bitmap_callbacks);
 		if (code != 0 && code != 1)
-			die("gif_initialise", code);
+			warning("gif_initialise", code);
 	} while (code != 1);
 
 	printf("P3\n");
@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
 
 		code = gif_decode_frame(&gif, i, &bitmap_callbacks);
 		if (code != 0)
-			die("gif_decode_frame", code);
+			warning("gif_decode_frame", code);
 
 		printf("# frame %u:\n", i);
 		image = (char *) gif.frame_image;
@@ -150,7 +150,7 @@ char *load_file(const char *path, size_t *data_size)
 }
 
 
-void die(const char *context, int code)
+void warning(const char *context, int code)
 {
 	fprintf(stderr, "%s failed: ", context);
 	switch (code)
@@ -175,7 +175,6 @@ void die(const char *context, int code)
 		break;
 	}
 	fprintf(stderr, "\n");
-	exit(EXIT_FAILURE);
 }
 
 
