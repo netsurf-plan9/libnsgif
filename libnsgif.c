@@ -121,13 +121,17 @@ int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_cal
 	unsigned int index;
 	int return_value;
 
-	/*	Check for sufficient data to be a GIF
+	/*	Check for sufficient data to be a GIF (6-byte header + 7-byte logical screen descriptor)
 	*/
 	if (gif->buffer_size < 13) return GIF_INSUFFICIENT_DATA;
 
 	/*	Get our current processing position
 	*/
 	gif_data = gif->gif_data + gif->buffer_position;
+
+	/* the gif format is thoroughly documented; a full description
+	 * can be found at http://www.w3.org/Graphics/GIF/spec-gif89a.txt
+	 */
 
 	/*	See if we should initialise the GIF
 	*/
@@ -147,21 +151,34 @@ int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_cal
 		gif->frame_count_partial = 0;
 		gif->decoded_frame = -1;
 
-		/*	Check we are a GIF
-		*/
+		/* 6-byte GIF file header is:
+		 *
+		 *	+0	CHAR[2]	Signature ('GIF')
+		 *	+3	CHAR[2]	Version ('87a' or '89a')
+		 */
 		if (strncmp((const char *) gif_data, "GIF", 3) != 0)
 			return GIF_DATA_ERROR;
 		gif_data += 3;
 
-		/*	Check we are a GIF type 87a or 89a
+		/*	Ensure GIF reports version 87a or 89a
 		*/
 /*		if ((strncmp(gif_data, "87a", 3) != 0) &&
 				(strncmp(gif_data, "89a", 3) != 0))
 			LOG(("Unknown GIF format - proceeding anyway"));
 */		gif_data += 3;
 
-		/*	Get our GIF data.
-		*/
+		/* 7-byte Logical Screen Descriptor is:
+		 *
+		 *	+6	SHORT	Logical Screen Width
+		 *	+8	SHORT	Logical Screen Height
+		 *	+10	CHAR	__Packed Fields__
+		 * 			1BIT	Global Color Table Flag
+		 * 			3BITS	Color Resolution
+		 * 			1BIT	Sort Flag
+		 * 			3BITS	Size of Global Color Table
+		 *	+11	CHAR	Background Color Index
+		 *	+12	CHAR	Pixel Aspect Ratio
+		 */
 		gif->width = gif_data[0] | (gif_data[1] << 8);
 		gif->height = gif_data[2] | (gif_data[3] << 8);
 		gif->global_colours = (gif_data[4] & 0x80);
@@ -665,8 +682,20 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 			gif_data++;
 		}
 
-		/*	Decode the header
-		*/
+		/* 10-byte Image Descriptor is:
+		 *
+		 *	+0	CHAR	Image Separator (0x2c)
+		 *	+1	SHORT	Image Left Position
+		 *	+3	SHORT	Image Top Position
+		 *	+5	SHORT	Width
+		 *	+7	SHORT	Height
+		 *	+9	CHAR	__Packed Fields__
+		 * 			1BIT	Local Color Table Flag
+		 * 			1BIT	Interlace Flag
+		 * 			1BIT	Sort Flag
+		 * 			2BITS	Reserved
+		 * 			3BITS	Size of Local Color Table
+		 */
 		if (gif_data[0] != 0x2c) {
 			return_value = GIF_DATA_ERROR;
 			break;
