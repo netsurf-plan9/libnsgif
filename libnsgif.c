@@ -396,6 +396,7 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 		start off with one frame allocated so we can always use realloc.
 	*/
 	gif->frames[frame].frame_pointer = gif->buffer_position;
+	gif->frames[frame].display = false;
 	gif->frames[frame].virgin = true;
 	gif->frames[frame].frame_delay = 100;
 	gif->frames[frame].redraw_required = false;
@@ -439,8 +440,15 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 			}
 
 			/*	Move to the first sub-block
+			 *	Skip 3 bytes for extension introducer, label, and extension size fields
+			 *	Skip the extension size itself
+			 *	The special case here is the comment extension (0xfe) because it has no
+			 *	size field and therefore extension size is not skipped either
 			*/
-			gif_data += 2;
+			if (gif_data[1] == 0xfe)
+				gif_data += 2;
+			else
+				gif_data += (3 + extension_size);
 
 			/*	Skip all the sub-blocks
 			*/
@@ -553,6 +561,7 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 		*/
 		gif->buffer_position = gif_data - gif->gif_data;
 		gif->frame_count = frame + 1;
+		gif->frames[frame].display = true;
 		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
 	}
 
@@ -573,6 +582,8 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 		GIF_DATA_ERROR for GIF error (invalid frame header)
 		GIF_INSUFFICIENT_DATA for insufficient data to do anything
 		0 for successful decoding
+		If a frame does not contain any image data, 0 is returned and
+			gif->current_error is set to GIF_FRAME_NO_DISPLAY
 */
 int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_callback_vt *bitmap_callbacks) {
 	unsigned int index = 0;
@@ -593,6 +604,14 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 	unsigned int block_size;
 	register int colour;
 	bool more_images = true;
+
+	/*	Ensure this frame is supposed to be decoded
+	*/
+	gif->current_error = 0;
+	if (gif->frames[frame].display == false) {
+		gif->current_error = GIF_FRAME_NO_DISPLAY;
+		return 0;
+	}
 
 	/*	Ensure we have a frame to decode
 	*/
@@ -672,8 +691,15 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 			}
 
 			/*	Move to the first sub-block
+			 *	Skip 3 bytes for extension introducer, label, and extension size fields
+			 *	Skip the extension size itself
+			 *	The special case here is the comment extension (0xfe) because it has no
+			 *	size field and therefore extension size is not skipped either
 			*/
-			gif_data += 2;
+			if (gif_data[1] == 0xfe)
+				gif_data += 2;
+			else
+				gif_data += (3 + extension_size);
 
 			/*	Skip all the sub-blocks
 			*/
