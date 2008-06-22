@@ -450,24 +450,27 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 			else
 				gif_data += (3 + extension_size);
 
-			/*	Skip all the sub-blocks
+			/*	Repeatedly skip blocks until we get a zero block or run out of data
+			 *	This library does not process this data
 			*/
-			while (gif_data[0] != 0x00)
-				gif_data += gif_data[0] + 1;
-			gif_data++;
+			block_size = 0;
+			while (block_size != 1) {
+				block_size = gif_data[0] + 1;
+				if ((gif_bytes -= block_size) < 0)
+					return GIF_INSUFFICIENT_FRAME_DATA;
+				gif_data += block_size;
+			}
 		}
 
 		/*	Check if we've finished
 		*/
-		gif_bytes = (gif_end - gif_data);
-		if (gif_bytes < 1)
+		if ((gif_bytes = (gif_end - gif_data)) < 1)
 			return GIF_INSUFFICIENT_FRAME_DATA;
-		else
-			if (gif_data[0] == GIF_TRAILER) {
-				gif->buffer_position = gif_data - gif->gif_data;
-				gif->frame_count = frame + 1;
-				return 1;
-			}
+		else if (gif_data[0] == GIF_TRAILER) {
+			gif->buffer_position = gif_data - gif->gif_data;
+			gif->frame_count = frame + 1;
+			return 1;
+		}
 
 		/*	If we're not done, there should be an image descriptor
 		*/
@@ -549,8 +552,6 @@ int gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitm
 		*/
 		block_size = 0;
 		while (block_size != 1) {
-			/*	Skip the block data
-			*/
 			block_size = gif_data[0] + 1;
 			if ((gif_bytes -= block_size) < 0)
 				return GIF_INSUFFICIENT_FRAME_DATA;
@@ -700,17 +701,24 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 				gif_data += 2;
 			else
 				gif_data += (3 + extension_size);
-
-			/*	Skip all the sub-blocks
+			
+			/*	Repeatedly skip blocks until we get a zero block or run out of data
+			 *	This library does not process this data
 			*/
-			while (gif_data[0] != 0x00)
-				gif_data += gif_data[0] + 1;
-			gif_data++;
+			block_size = 0;
+			while (block_size != 1) {
+				block_size = gif_data[0] + 1;
+				if ((gif_bytes -= block_size) < 0) {
+					return_value = GIF_INSUFFICIENT_FRAME_DATA;
+					goto gif_decode_frame_exit;
+				}
+				gif_data += block_size;
+			}
 		}
 
 		/*	Ensure we have enough data for the 10-byte image descriptor + 1-byte gif trailer
 		*/
-		if ((gif_bytes = (gif_end - gif_data)) < 12) {
+		if (gif_bytes < 12) {
 			return_value = GIF_INSUFFICIENT_FRAME_DATA;
 			break;
 		}
@@ -876,8 +884,6 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 			gif_data = gif->gif_data + gif->buffer_size;
 			block_size = 0;
 			while (block_size != 1) {
-				/*	Skip the block data
-				*/
 				block_size = gif_data[0] + 1;
 				if ((gif_bytes -= block_size) < 0) {
 					return_value = GIF_INSUFFICIENT_FRAME_DATA;
@@ -887,12 +893,12 @@ int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_c
 			}
 		}
 gif_decode_frame_exit:
-
 		/*	Check for end of data
 		*/
-		gif_bytes = gif->buffer_size - gif->buffer_position;
-		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
 		gif->buffer_position++;
+		gif_bytes = gif->buffer_size - gif->buffer_position;
+		gif_data = gif->gif_data + gif->buffer_position;
+		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
 	}
 
 	/*	Check if we should test for optimisation
