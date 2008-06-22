@@ -69,9 +69,9 @@ int main(int argc, char *argv[])
 	/* begin decoding */
 	do {
 		code = gif_initialise(&gif, &bitmap_callbacks);
-		if (code != 0 && code != 1)
+		if (code != GIF_OK && code != GIF_WORKING)
 			warning("gif_initialise", code);
-	} while (code != 1);
+	} while (code != GIF_OK);
 
 	printf("P3\n");
 	printf("# %s\n", argv[1]);
@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
 		char *image;
 
 		code = gif_decode_frame(&gif, i, &bitmap_callbacks);
-		if (code != 0)
+		if (code != GIF_OK)
 			warning("gif_decode_frame", code);
 
 		printf("# frame %u:\n", i);

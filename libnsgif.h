@@ -28,12 +28,16 @@
 
 /*	Error return values
 */
-#define GIF_INSUFFICIENT_FRAME_DATA -1
-#define GIF_FRAME_DATA_ERROR -2
-#define GIF_INSUFFICIENT_DATA -3
-#define GIF_DATA_ERROR -4
-#define GIF_INSUFFICIENT_MEMORY -5
-#define GIF_FRAME_NO_DISPLAY -6
+typedef enum {
+	GIF_WORKING = 1,
+	GIF_OK = 0,
+	GIF_INSUFFICIENT_FRAME_DATA = -1,
+	GIF_FRAME_DATA_ERROR = -2,
+	GIF_INSUFFICIENT_DATA = -3,
+	GIF_DATA_ERROR = -4,
+	GIF_INSUFFICIENT_MEMORY = -5,
+	GIF_FRAME_NO_DISPLAY = -6
+} gif_result;
 
 /*	Maximum colour table size
 */
@@ -107,8 +111,8 @@ typedef struct gif_animation {
 	int current_error;			/**< current error type, or 0 for none*/
 } gif_animation;
 
-int gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
-int gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_callback_vt *bitmap_callbacks);
+gif_result gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
+gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_callback_vt *bitmap_callbacks);
 void gif_finalise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
 
 #endif
