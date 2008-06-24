@@ -63,12 +63,28 @@
 	[rjw] - Fri 2nd April 2004
 */
 
+/*	TO-DO LIST
+	=================
+
+	+ Merge the gif_initialise_frame_extensions and
+	gif_decode_frame_extensions functions, because it seems unnecessary to
+	have both.
+	+ Correct the usage of the background_action variable, which is actually
+	an implementation of the "Disposal Method" flag in the Graphic Control
+	Extension.
+/*
+
 
 
 /*	Internal GIF routines
 */
-static gif_result gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height, gif_bitmap_callback_vt *bitmap_callbacks);
+static gif_result gif_initialise_sprite(struct gif_animation *gif, unsigned int width, unsigned int height,
+					 gif_bitmap_callback_vt *bitmap_callbacks);
 static gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
+static gif_result gif_initialise_frame_extensions(struct gif_animation *gif, const int frame,
+						   unsigned int *background_action_p);
+static gif_result gif_decode_frame_extensions(struct gif_animation *gif, unsigned int *background_action_p,
+						unsigned int *flags_p, int *transparency_index_p);
 static unsigned int gif_interlaced_line(int height, int y);
 
 
@@ -118,9 +134,9 @@ static bool clear_image = false;
 gif_result gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
 	unsigned char *gif_data;
 	unsigned int index;
-	int return_value;
+	gif_result return_value;
 
-	/* the gif format is thoroughly documented; a full description
+	/* The GIF format is thoroughly documented; a full description
 	 * can be found at http://www.w3.org/Graphics/GIF/spec-gif89a.txt
 	 */
 
@@ -343,7 +359,7 @@ static gif_result gif_initialise_sprite(struct gif_animation *gif, unsigned int 
 		GIF_OK for successful decoding
 		GIF_WORKING for successful decoding if more frames are expected
 */
-gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
+static gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
 	int frame;
 	gif_frame *temp_buf;
 
@@ -352,10 +368,9 @@ gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_v
 	unsigned int flags = 0;
 	unsigned int background_action;
 	unsigned int width, height, offset_x, offset_y;
-	unsigned int extension_size, colour_table_size;
-	unsigned int block_size;
-	bool more_images = true;
+	unsigned int block_size, colour_table_size;
 	bool first_image = true;
+	gif_result return_value;
 
 	/*	Get the frame to decode and our data position
 	*/
@@ -411,161 +426,116 @@ gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_v
 		the data contained within. This is all basically a cut down version of
 		gif_decode_frame that doesn't have any of the LZW bits in it.
 	*/
-	while (more_images) {
 
-		/*	Decode the extensions
-		*/
-		background_action = 0;
-		while (gif_data[0] == 0x21) {
-			/*	Get the extension size
-			*/
-			extension_size = gif_data[2];
+	/*	Initialise any extensions occurring prior to image data
+	*/
+	gif->buffer_position = gif_data - gif->gif_data;
+	if ((return_value = gif_initialise_frame_extensions(gif, frame, &background_action)) != GIF_OK)
+		return return_value;
+	gif_data = (gif->gif_data + gif->buffer_position);
+	gif_bytes = (gif_end - gif_data);
 
-			/*	Graphic control extension - store the frame delay.
-			*/
-			if (gif_data[1] == 0xf9) {
-				gif->frames[frame].frame_delay = gif_data[4] | (gif_data[5] << 8);
-				background_action = ((gif_data[3] & 0x1c) >> 2);
-				more_images = false;
-
-			/*	Application extension - handle NETSCAPE2.0 looping
-			*/
-			} else if (gif_data[1] == 0xff) {
-				if (gif_bytes < 18) return GIF_INSUFFICIENT_FRAME_DATA;
-				if ((gif_data[2] == 0x0b) &&
-					(strncmp((const char *) gif_data + 3, 
-						"NETSCAPE2.0", 11) == 0) &&
-					(gif_data[14] == 0x03) &&
-					(gif_data[15] == 0x01))
-						gif->loop_count = gif_data[16] | (gif_data[17] << 8);
-			}
-
-			/*	Move to the first sub-block
-			 *	Skip 3 bytes for extension introducer, label, and extension size fields
-			 *	Skip the extension size itself
-			 *	The special case here is the comment extension (0xfe) because it has no
-			 *	size field and therefore extension size is not skipped either
-			*/
-			if (gif_data[1] == 0xfe)
-				gif_data += 2;
-			else
-				gif_data += (3 + extension_size);
-
-			/*	Repeatedly skip blocks until we get a zero block or run out of data
-			 *	This library does not process this data
-			*/
-			block_size = 0;
-			while (block_size != 1) {
-				block_size = gif_data[0] + 1;
-				if ((gif_bytes -= block_size) < 0)
-					return GIF_INSUFFICIENT_FRAME_DATA;
-				gif_data += block_size;
-			}
-		}
-
-		/*	Check if we've finished
-		*/
-		if ((gif_bytes = (gif_end - gif_data)) < 1)
-			return GIF_INSUFFICIENT_FRAME_DATA;
-		else if (gif_data[0] == GIF_TRAILER) {
-			gif->buffer_position = gif_data - gif->gif_data;
-			gif->frame_count = frame + 1;
-			return GIF_OK;
-		}
-
-		/*	If we're not done, there should be an image descriptor
-		*/
-		if (gif_data[0] != 0x2c) return GIF_FRAME_DATA_ERROR;
-
-		/*	Do some simple boundary checking
-		*/
-		offset_x = gif_data[1] | (gif_data[2] << 8);
-		offset_y = gif_data[3] | (gif_data[4] << 8);
-		width = gif_data[5] | (gif_data[6] << 8);
-		height = gif_data[7] | (gif_data[8] << 8);
-
-		/*	Set up the redraw characteristics. We have to check for extending the area
-			due to multi-image frames.
-		*/
-		if (!first_image) {
-			if (gif->frames[frame].redraw_x > offset_x) {
-				gif->frames[frame].redraw_width += (gif->frames[frame].redraw_x - offset_x);
-				gif->frames[frame].redraw_x = offset_x;
-			}
-			if (gif->frames[frame].redraw_y > offset_y) {
-				gif->frames[frame].redraw_height += (gif->frames[frame].redraw_y - offset_y);
-				gif->frames[frame].redraw_y = offset_y;
-			}
-			if ((offset_x + width) > (gif->frames[frame].redraw_x + gif->frames[frame].redraw_width))
-				gif->frames[frame].redraw_width = (offset_x + width) - gif->frames[frame].redraw_x;
-			if ((offset_y + height) > (gif->frames[frame].redraw_y + gif->frames[frame].redraw_height))
-				gif->frames[frame].redraw_height = (offset_y + height) - gif->frames[frame].redraw_y;
-		} else {
-			first_image = false;
-			gif->frames[frame].redraw_x = offset_x;
-			gif->frames[frame].redraw_y = offset_y;
-			gif->frames[frame].redraw_width = width;
-			gif->frames[frame].redraw_height = height;
-		}
-
-		/*	if we are clearing the background then we need to redraw enough to cover the previous
-			frame too
-		*/
-		gif->frames[frame].redraw_required = ((background_action == 2) || (background_action == 3));
-
-		/*	Boundary checking - shouldn't ever happen except with junk data
-		*/
-		if (gif_initialise_sprite(gif, (offset_x + width), (offset_y + height), bitmap_callbacks))
-			return GIF_INSUFFICIENT_MEMORY;
-
-		/*	Decode the flags
-		*/
-		flags = gif_data[9];
-		colour_table_size = 2 << (flags & 0x07);
-
-		/*	Move our data onwards and remember we've got a bit of this frame
-		*/
-		gif_data += 10;
-		gif_bytes = (gif_end - gif_data);
-		gif->frame_count_partial = frame + 1;
-
-		/*	Skip the local colour table
-		*/
-		if (flags & 0x80) {
-			gif_data += 3 * colour_table_size;
-			if ((gif_bytes = (gif_end - gif_data)) < 0)
-				return GIF_INSUFFICIENT_FRAME_DATA;
-		}
-
-		/*	Ensure we have a correct code size
-		*/
-		if (gif_data[0] > GIF_MAX_LZW)
-			return GIF_DATA_ERROR;
-
-		/*	Move our pointer to the actual image data
-		*/
-		gif_data++;
-		if (--gif_bytes < 0)
-			return GIF_INSUFFICIENT_FRAME_DATA;
-
-		/*	Repeatedly skip blocks until we get a zero block or run out of data
-		 *	These blocks of image data are processed later by gif_decode_frame()
-		*/
-		block_size = 0;
-		while (block_size != 1) {
-			block_size = gif_data[0] + 1;
-			if ((gif_bytes -= block_size) < 0)
-				return GIF_INSUFFICIENT_FRAME_DATA;
-			gif_data += block_size;
-		}
-
-		/*	Check for end of data
-		*/
-		gif->buffer_position = gif_data - gif->gif_data;
+	/*	Check if we've finished
+	*/
+	if ((gif_bytes = (gif_end - gif_data)) < 1)
+		return GIF_INSUFFICIENT_FRAME_DATA;
+	else if (gif_data[0] == GIF_TRAILER) {
+		gif->buffer_position = (gif_data - gif->gif_data);
 		gif->frame_count = frame + 1;
-		gif->frames[frame].display = true;
-		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
+		return GIF_OK;
 	}
+
+	/*	If we're not done, there should be an image descriptor
+	*/
+	if (gif_data[0] != 0x2c) return GIF_FRAME_DATA_ERROR;
+
+	/*	Do some simple boundary checking
+	*/
+	offset_x = gif_data[1] | (gif_data[2] << 8);
+	offset_y = gif_data[3] | (gif_data[4] << 8);
+	width = gif_data[5] | (gif_data[6] << 8);
+	height = gif_data[7] | (gif_data[8] << 8);
+
+	/*	Set up the redraw characteristics. We have to check for extending the area
+		due to multi-image frames.
+	*/
+	if (!first_image) {
+		if (gif->frames[frame].redraw_x > offset_x) {
+			gif->frames[frame].redraw_width += (gif->frames[frame].redraw_x - offset_x);
+			gif->frames[frame].redraw_x = offset_x;
+		}
+		if (gif->frames[frame].redraw_y > offset_y) {
+			gif->frames[frame].redraw_height += (gif->frames[frame].redraw_y - offset_y);
+			gif->frames[frame].redraw_y = offset_y;
+		}
+		if ((offset_x + width) > (gif->frames[frame].redraw_x + gif->frames[frame].redraw_width))
+			gif->frames[frame].redraw_width = (offset_x + width) - gif->frames[frame].redraw_x;
+		if ((offset_y + height) > (gif->frames[frame].redraw_y + gif->frames[frame].redraw_height))
+			gif->frames[frame].redraw_height = (offset_y + height) - gif->frames[frame].redraw_y;
+	} else {
+		first_image = false;
+		gif->frames[frame].redraw_x = offset_x;
+		gif->frames[frame].redraw_y = offset_y;
+		gif->frames[frame].redraw_width = width;
+		gif->frames[frame].redraw_height = height;
+	}
+
+	/*	if we are clearing the background then we need to redraw enough to cover the previous
+		frame too
+	*/
+	gif->frames[frame].redraw_required = ((background_action == 2) || (background_action == 3));
+
+	/*	Boundary checking - shouldn't ever happen except with junk data
+	*/
+	if (gif_initialise_sprite(gif, (offset_x + width), (offset_y + height), bitmap_callbacks))
+		return GIF_INSUFFICIENT_MEMORY;
+
+	/*	Decode the flags
+	*/
+	flags = gif_data[9];
+	colour_table_size = 2 << (flags & 0x07);
+
+	/*	Move our data onwards and remember we've got a bit of this frame
+	*/
+	gif_data += 10;
+	gif_bytes = (gif_end - gif_data);
+	gif->frame_count_partial = frame + 1;
+
+	/*	Skip the local colour table
+	*/
+	if (flags & 0x80) {
+		gif_data += 3 * colour_table_size;
+		if ((gif_bytes = (gif_end - gif_data)) < 0)
+			return GIF_INSUFFICIENT_FRAME_DATA;
+	}
+
+	/*	Ensure we have a correct code size
+	*/
+	if (gif_data[0] > GIF_MAX_LZW)
+		return GIF_DATA_ERROR;
+
+	/*	Move our pointer to the actual image data
+	*/
+	gif_data++;
+	if (--gif_bytes < 0)
+		return GIF_INSUFFICIENT_FRAME_DATA;
+
+	/*	Repeatedly skip blocks until we get a zero block or run out of data
+	 *	These blocks of image data are processed later by gif_decode_frame()
+	*/
+	block_size = 0;
+	while (block_size != 1) {
+		block_size = gif_data[0] + 1;
+		if ((gif_bytes -= block_size) < 0)
+			return GIF_INSUFFICIENT_FRAME_DATA;
+		gif_data += block_size;
+	}
+
+	/*	Add the frame and set the display flag
+	*/
+	gif->buffer_position = gif_data - gif->gif_data;
+	gif->frame_count = frame + 1;
+	gif->frames[frame].display = true;
 
 	/*	Check if we've finished
 	*/
@@ -574,6 +544,78 @@ gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_v
 	else
 		if (gif_data[0] == GIF_TRAILER) return GIF_OK;
 	return GIF_WORKING;
+}
+
+/**	Attempts to initialise the frame's extensions
+
+	@return GIF_INSUFFICIENT_FRAME_DATA for insufficient data to complete the frame
+		GIF_OK for successful initialisation
+*/
+static gif_result gif_initialise_frame_extensions(struct gif_animation *gif, const int frame, unsigned int *background_action_p) {
+	unsigned char *gif_data, *gif_end;
+	int gif_bytes;
+	unsigned int extension_size, block_size;
+
+	/*	Get our buffer position etc.
+	*/
+	gif_data = (unsigned char *)(gif->gif_data + gif->buffer_position);
+	gif_end = (unsigned char *)(gif->gif_data + gif->buffer_size);
+	gif_bytes = (gif_end - gif_data);
+	
+	/*	Initialise the extensions
+	*/
+	*background_action_p = 0;
+	while (gif_data[0] == 0x21) {
+		/*	Get the extension size
+		*/
+		extension_size = gif_data[2];
+
+		/*	Graphic control extension - store the frame delay.
+		*/
+		if (gif_data[1] == 0xf9) {
+			if (gif_bytes < 6) return GIF_INSUFFICIENT_FRAME_DATA;
+			gif->frames[frame].frame_delay = gif_data[4] | (gif_data[5] << 8);
+			*background_action_p = ((gif_data[3] & 0x1c) >> 2);
+
+		/*	Application extension - handle NETSCAPE2.0 looping
+		*/
+		} else if (gif_data[1] == 0xff) {
+			if (gif_bytes < 18) return GIF_INSUFFICIENT_FRAME_DATA;
+			if ((gif_data[2] == 0x0b) &&
+				(strncmp((const char *) gif_data + 3, 
+					"NETSCAPE2.0", 11) == 0) &&
+				(gif_data[14] == 0x03) &&
+				(gif_data[15] == 0x01))
+					gif->loop_count = gif_data[16] | (gif_data[17] << 8);
+		}
+
+		/*	Move to the first sub-block
+		 *	Skip 3 bytes for extension introducer, label, and extension size fields
+		 *	Skip the extension size itself
+		 *	The special case here is the comment extension (0xfe) because it has no
+		 *	size field and therefore extension size is not skipped either
+		*/
+		if (gif_data[1] == 0xfe)
+			gif_data += 2;
+		else
+			gif_data += (3 + extension_size);
+
+		/*	Repeatedly skip blocks until we get a zero block or run out of data
+		 *	This library does not process this data
+		*/
+		block_size = 0;
+		while (block_size != 1) {
+			block_size = gif_data[0] + 1;
+			if ((gif_bytes -= block_size) < 0)
+				return GIF_INSUFFICIENT_FRAME_DATA;
+			gif_data += block_size;
+		}
+	}
+
+	/*	Set buffer position and return
+	*/
+	gif->buffer_position = (gif_data - gif->gif_data);
+	return GIF_OK;
 }
 
 
@@ -589,15 +631,13 @@ gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_callback_v
 */
 gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_bitmap_callback_vt *bitmap_callbacks) {
 	unsigned int index = 0;
-	unsigned char *gif_data;
-	unsigned char *gif_end;
+	unsigned char *gif_data, *gif_end;
 	int gif_bytes;
 	unsigned int width, height, offset_x, offset_y;
 	unsigned int flags, colour_table_size, interlace;
 	unsigned int *colour_table;
 	unsigned int *frame_data = 0;	// Set to 0 for no warnings
 	unsigned int *frame_scanline;
-	unsigned int extension_size;
 	unsigned int background_action;
 	int transparency_index = -1;
 	unsigned int save_buffer_position;
@@ -605,11 +645,9 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 	unsigned int x, y, decode_y, burst_bytes;
 	unsigned int block_size;
 	register int colour;
-	bool more_images = true;
 
 	/*	Ensure this frame is supposed to be decoded
 	*/
-	gif->current_error = 0;
 	if (gif->frames[frame].display == false) {
 		gif->current_error = GIF_FRAME_NO_DISPLAY;
 		return GIF_OK;
@@ -664,243 +702,196 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 	*/
 	save_buffer_position = gif->buffer_position;
 	gif->buffer_position = gif_data - gif->gif_data;
-	gif_data = gif->gif_data + gif->buffer_position;
 
-	/*	We've got to do this more than one time if we've got multiple images
+	/*	Decode any extensions occurring prior to image data
 	*/
-	while (more_images) {
-		background_action = 0;
+	if ((return_value = gif_decode_frame_extensions(gif, &background_action, &flags, &transparency_index)) != GIF_OK)
+		goto gif_decode_frame_exit;
+	gif_data = (gif->gif_data + gif->buffer_position);
+	gif_bytes = (gif_end - gif_data);
 
-		/*	Decode the extensions
+	/*	Ensure we have enough data for the 10-byte image descriptor + 1-byte gif trailer
+	*/
+	if (gif_bytes < 12) {
+		return_value = GIF_INSUFFICIENT_FRAME_DATA;
+		goto gif_decode_frame_exit;
+	}
+
+	/* 10-byte Image Descriptor is:
+		*
+		*	+0	CHAR	Image Separator (0x2c)
+		*	+1	SHORT	Image Left Position
+		*	+3	SHORT	Image Top Position
+		*	+5	SHORT	Width
+		*	+7	SHORT	Height
+		*	+9	CHAR	__Packed Fields__
+		* 			1BIT	Local Color Table Flag
+		* 			1BIT	Interlace Flag
+		* 			1BIT	Sort Flag
+		* 			2BITS	Reserved
+		* 			3BITS	Size of Local Color Table
 		*/
-		while (gif_data[0] == 0x21) {
+	if (gif_data[0] != 0x2c) {
+		return_value = GIF_DATA_ERROR;
+		goto gif_decode_frame_exit;
+	}
+	offset_x = gif_data[1] | (gif_data[2] << 8);
+	offset_y = gif_data[3] | (gif_data[4] << 8);
+	width = gif_data[5] | (gif_data[6] << 8);
+	height = gif_data[7] | (gif_data[8] << 8);
 
-			/*	Get the extension size
-			*/
-			extension_size = gif_data[2];
+	/*	Boundary checking - shouldn't ever happen except unless the data has been
+		modified since initialisation.
+	*/
+	if ((offset_x + width > gif->width) || (offset_y + height > gif->height)) {
+		return_value = GIF_DATA_ERROR;
+		goto gif_decode_frame_exit;
+	}
 
-			/*	Graphic control extension - store the frame delay.
-			*/
-			if (gif_data[1] == 0xf9) {
-				if (gif_bytes < 7) {
-					return_value = GIF_INSUFFICIENT_FRAME_DATA;
-					break;
-				}
-				flags = gif_data[3];
-				if (flags & 0x01) transparency_index = gif_data[6];
-				background_action = ((flags & 0x1c) >> 2);
-				more_images = false;
-			}
+	/*	Decode the flags
+	*/
+	flags = gif_data[9];
+	colour_table_size = 2 << (flags & 0x07);
+	interlace = flags & 0x40;
 
-			/*	Move to the first sub-block
-			 *	Skip 3 bytes for extension introducer, label, and extension size fields
-			 *	Skip the extension size itself
-			 *	The special case here is the comment extension (0xfe) because it has no
-			 *	size field and therefore extension size is not skipped either
-			*/
-			if (gif_data[1] == 0xfe)
-				gif_data += 2;
-			else
-				gif_data += (3 + extension_size);
-			
-			/*	Repeatedly skip blocks until we get a zero block or run out of data
-			 *	This library does not process this data
-			*/
-			block_size = 0;
-			while (block_size != 1) {
-				block_size = gif_data[0] + 1;
-				if ((gif_bytes -= block_size) < 0) {
-					return_value = GIF_INSUFFICIENT_FRAME_DATA;
-					goto gif_decode_frame_exit;
-				}
-				gif_data += block_size;
-			}
-		}
+	/*	Move our pointer to the colour table or image data (if no colour table is given)
+	*/
+	gif_data += 10;
+	gif_bytes = (gif_end - gif_data);
 
-		/*	Ensure we have enough data for the 10-byte image descriptor + 1-byte gif trailer
-		*/
-		if (gif_bytes < 12) {
+	/*	Set up the colour table
+	*/
+	if (flags & 0x80) {
+		if (gif_bytes < (int)(3 * colour_table_size)) {
 			return_value = GIF_INSUFFICIENT_FRAME_DATA;
-			break;
+			goto gif_decode_frame_exit;
 		}
-
-		/* 10-byte Image Descriptor is:
-		 *
-		 *	+0	CHAR	Image Separator (0x2c)
-		 *	+1	SHORT	Image Left Position
-		 *	+3	SHORT	Image Top Position
-		 *	+5	SHORT	Width
-		 *	+7	SHORT	Height
-		 *	+9	CHAR	__Packed Fields__
-		 * 			1BIT	Local Color Table Flag
-		 * 			1BIT	Interlace Flag
-		 * 			1BIT	Sort Flag
-		 * 			2BITS	Reserved
-		 * 			3BITS	Size of Local Color Table
-		 */
-		if (gif_data[0] != 0x2c) {
-			return_value = GIF_DATA_ERROR;
-			break;
-		}
-		offset_x = gif_data[1] | (gif_data[2] << 8);
-		offset_y = gif_data[3] | (gif_data[4] << 8);
-		width = gif_data[5] | (gif_data[6] << 8);
-		height = gif_data[7] | (gif_data[8] << 8);
-
-		/*	Boundary checking - shouldn't ever happen except unless the data has been
-			modified since initialisation.
-		*/
-		if ((offset_x + width > gif->width) || (offset_y + height > gif->height)) {
-			return_value = GIF_DATA_ERROR;
-			break;
-		}
-
-		/*	Decode the flags
-		*/
-		flags = gif_data[9];
-		colour_table_size = 2 << (flags & 0x07);
-		interlace = flags & 0x40;
-
-		/*	Move our pointer to the colour table or image data (if no colour table is given)
-		*/
-		gif_data += 10;
-		gif_bytes = (gif_end - gif_data);
-
-		/*	Set up the colour table
-		*/
-		if (flags & 0x80) {
-			if (gif_bytes < (int)(3 * colour_table_size)) {
-				return_value = GIF_INSUFFICIENT_FRAME_DATA;
-				break;
-			}
-			colour_table = gif->local_colour_table;
-			if (!clear_image) {
-				for (index = 0; index < colour_table_size; index++) {
-					char colour[] = {gif_data[0], gif_data[1],
-							gif_data[2], (char)0xff};
-					colour_table[index] = *((int *) colour);
-					gif_data += 3;
-				}
-			} else {
-				gif_data += 3 * colour_table_size;
-			}
-			gif_bytes = (gif_end - gif_data);
-		} else {
-			colour_table = gif->global_colour_table;
-		}
-
-		/*	Check if we've finished
-		*/
-		if (gif_bytes < 1) {
-			return_value = GIF_INSUFFICIENT_FRAME_DATA;
-			break;
-		} else if (gif_data[0] == GIF_TRAILER) {
-			return_value = GIF_OK;
-			break;
-		}
-
-		/*	If we are clearing the image we just clear, if not decode
-		*/
+		colour_table = gif->local_colour_table;
 		if (!clear_image) {
-			/*	Ensure we have enough data for the 1-byte LZW code size + 1-byte gif trailer
-			*/
-			if (gif_bytes < 2) {
-				return_value = GIF_INSUFFICIENT_FRAME_DATA;
-				break;
-			/*	If we only have the 1-byte LZW code size + 1-byte gif trailer, we're finished
-			*/
-			} else if ((gif_bytes = 2) && (gif_data[1] == GIF_TRAILER)) {
-				return_value = GIF_OK;
-				break;
+			for (index = 0; index < colour_table_size; index++) {
+				char colour[] = {gif_data[0], gif_data[1],
+						gif_data[2], (char)0xff};
+				colour_table[index] = *((int *) colour);
+				gif_data += 3;
 			}
+		} else {
+			gif_data += 3 * colour_table_size;
+		}
+		gif_bytes = (gif_end - gif_data);
+	} else {
+		colour_table = gif->global_colour_table;
+	}
 
-			/*	Set our dirty status
+	/*	Check if we've finished
+	*/
+	if (gif_bytes < 1) {
+		return_value = GIF_INSUFFICIENT_FRAME_DATA;
+		goto gif_decode_frame_exit;
+	} else if (gif_data[0] == GIF_TRAILER) {
+		return_value = GIF_OK;
+		goto gif_decode_frame_exit;
+	}
+
+	/*	If we are clearing the image we just clear, if not decode
+	*/
+	if (!clear_image) {
+		/*	Ensure we have enough data for the 1-byte LZW code size + 1-byte gif trailer
+		*/
+		if (gif_bytes < 2) {
+			return_value = GIF_INSUFFICIENT_FRAME_DATA;
+			goto gif_decode_frame_exit;
+		/*	If we only have the 1-byte LZW code size + 1-byte gif trailer, we're finished
+		*/
+		} else if ((gif_bytes = 2) && (gif_data[1] == GIF_TRAILER)) {
+			return_value = GIF_OK;
+			goto gif_decode_frame_exit;
+		}
+
+		/*	Set our dirty status
+		*/
+		if ((background_action == 2) || (background_action == 3))
+			gif->dirty_frame = frame;
+
+		/*	Initialise the LZW decoding
+		*/
+		set_code_size = gif_data[0];
+		gif->buffer_position = (gif_data - gif->gif_data) + 1;
+
+		/*	Set our code variables
+		*/
+		code_size = set_code_size + 1;
+		clear_code = (1 << set_code_size);
+		end_code = clear_code + 1;
+		max_code_size = clear_code << 1;
+		max_code = clear_code + 2;
+		curbit = lastbit = 0;
+		last_byte = 2;
+		get_done = false;
+		direct = buf;
+		gif_init_LZW(gif);
+
+		/*	Decompress the data
+		*/
+		for (y = 0; y < height; y++) {
+			if (interlace)
+				decode_y = gif_interlaced_line(height, y) + offset_y;
+			else
+				decode_y = y + offset_y;
+			frame_scanline = frame_data + offset_x + (decode_y * gif->width);
+
+			/*	Rather than decoding pixel by pixel, we try to burst out streams
+				of data to remove the need for end-of data checks every pixel.
 			*/
-			if ((background_action == 2) || (background_action == 3))
-				gif->dirty_frame = frame;
-
-			/*	Initialise the LZW decoding
-			*/
-			set_code_size = gif_data[0];
-			gif->buffer_position = (gif_data - gif->gif_data) + 1;
-
-			/*	Set our code variables
-			*/
-			code_size = set_code_size + 1;
-			clear_code = (1 << set_code_size);
-			end_code = clear_code + 1;
-			max_code_size = clear_code << 1;
-			max_code = clear_code + 2;
-			curbit = lastbit = 0;
-			last_byte = 2;
-			get_done = false;
-			direct = buf;
-			gif_init_LZW(gif);
-
-			/*	Decompress the data
-			*/
-			for (y = 0; y < height; y++) {
-				if (interlace)
-					decode_y = gif_interlaced_line(height, y) + offset_y;
-				else
-					decode_y = y + offset_y;
-				frame_scanline = frame_data + offset_x + (decode_y * gif->width);
-
-				/*	Rather than decoding pixel by pixel, we try to burst out streams
-					of data to remove the need for end-of data checks every pixel.
-				*/
-				x = width;
-				while (x > 0) {
-					burst_bytes = (stack_pointer - stack);
-					if (burst_bytes > 0) {
-						if (burst_bytes > x)
-							burst_bytes = x;
-						x -= burst_bytes;
-						while (burst_bytes-- > 0) {
-							if ((colour = *--stack_pointer) != transparency_index)
-								  *frame_scanline = colour_table[colour];
-							frame_scanline++;
-						}
-					} else {
-					  	if (!gif_next_LZW(gif)) {
-					  		return_value = gif->current_error;
-					  		goto gif_decode_frame_exit;
-					  	}
+			x = width;
+			while (x > 0) {
+				burst_bytes = (stack_pointer - stack);
+				if (burst_bytes > 0) {
+					if (burst_bytes > x)
+						burst_bytes = x;
+					x -= burst_bytes;
+					while (burst_bytes-- > 0) {
+						if ((colour = *--stack_pointer) != transparency_index)
+								*frame_scanline = colour_table[colour];
+						frame_scanline++;
+					}
+				} else {
+					if (!gif_next_LZW(gif)) {
+						return_value = gif->current_error;
+						goto gif_decode_frame_exit;
 					}
 				}
 			}
-		} else {
-			/*	Clear our frame
-			*/
-			if ((background_action == 2) || (background_action == 3)) {
-				for (y = 0; y < height; y++) {
-					frame_scanline = frame_data + offset_x + ((offset_y + y) * gif->width);
-					memset(frame_scanline, 0x00, width * 4);
-				}
-			}
-
-			/*	Repeatedly skip blocks until we get a zero block or run out of data
-			*/
-			gif_bytes = gif->buffer_size - gif->buffer_position;
-			gif_data = gif->gif_data + gif->buffer_size;
-			block_size = 0;
-			while (block_size != 1) {
-				block_size = gif_data[0] + 1;
-				if ((gif_bytes -= block_size) < 0) {
-					return_value = GIF_INSUFFICIENT_FRAME_DATA;
-					goto gif_decode_frame_exit;
-				}
-				gif_data += block_size;
+		}
+	} else {
+		/*	Clear our frame
+		*/
+		if ((background_action == 2) || (background_action == 3)) {
+			for (y = 0; y < height; y++) {
+				frame_scanline = frame_data + offset_x + ((offset_y + y) * gif->width);
+				memset(frame_scanline, 0x00, width * 4);
 			}
 		}
-gif_decode_frame_exit:
-		/*	Check for end of data
+
+		/*	Repeatedly skip blocks until we get a zero block or run out of data
 		*/
-		gif->buffer_position++;
 		gif_bytes = gif->buffer_size - gif->buffer_position;
-		gif_data = gif->gif_data + gif->buffer_position;
-		more_images &= !((gif_bytes < 1) || (gif_data[0] == GIF_TRAILER));
+		gif_data = gif->gif_data + gif->buffer_size;
+		block_size = 0;
+		while (block_size != 1) {
+			block_size = gif_data[0] + 1;
+			if ((gif_bytes -= block_size) < 0) {
+				return_value = GIF_INSUFFICIENT_FRAME_DATA;
+				goto gif_decode_frame_exit;
+			}
+			gif_data += block_size;
+		}
 	}
+gif_decode_frame_exit:
+	/*	Check for end of data
+	*/
+	gif->buffer_position++;
+	gif_bytes = gif->buffer_size - gif->buffer_position;
+	gif_data = gif->gif_data + gif->buffer_position;
 
 	/*	Check if we should test for optimisation
 	*/
@@ -919,6 +910,71 @@ gif_decode_frame_exit:
 	*/
 	return return_value;
 
+}
+
+/**	Attempts to decode the frame's extensions
+
+	@return GIF_INSUFFICIENT_FRAME_DATA for insufficient data to complete the frame
+		GIF_OK for successful decoding
+*/
+static gif_result gif_decode_frame_extensions(struct gif_animation *gif, unsigned int *background_action_p,
+						unsigned int *flags_p, int *transparency_index_p) {
+	unsigned int extension_size, block_size;
+	unsigned char *gif_data, *gif_end;
+	int gif_bytes;
+
+	/*	Get our buffer position etc.
+	*/
+	gif_data = (unsigned char *)(gif->gif_data + gif->buffer_position);
+	gif_end = (unsigned char *)(gif->gif_data + gif->buffer_size);
+	gif_bytes = (gif_end - gif_data);
+	
+	/*	Decode the extensions
+	*/
+	*background_action_p = 0;
+	while (gif_data[0] == 0x21) {
+
+		/*	Get the extension size
+		*/
+		extension_size = gif_data[2];
+
+		/*	Graphic control extension - store the frame delay.
+		*/
+		if (gif_data[1] == 0xf9) {
+			if (gif_bytes < 7)
+				return GIF_INSUFFICIENT_FRAME_DATA;
+			*flags_p = gif_data[3];
+			if (*flags_p & 0x01) *transparency_index_p = gif_data[6];
+			*background_action_p = ((*flags_p & 0x1c) >> 2);
+		}
+
+		/*	Move to the first sub-block
+		 *	Skip 3 bytes for extension introducer, label, and extension size fields
+		 *	Skip the extension size itself
+		 *	The special case here is the comment extension (0xfe) because it has no
+		 *	size field and therefore extension size is not skipped either
+		*/
+		if (gif_data[1] == 0xfe)
+			gif_data += 2;
+		else
+			gif_data += (3 + extension_size);
+		
+		/*	Repeatedly skip blocks until we get a zero block or run out of data
+		 *	This library does not process this data
+		*/
+		block_size = 0;
+		while (block_size != 1) {
+			block_size = gif_data[0] + 1;
+			if ((gif_bytes -= block_size) < 0)
+				return GIF_INSUFFICIENT_FRAME_DATA;
+			gif_data += block_size;
+		}
+	}
+
+	/*	Set buffer position and return
+	*/
+	gif->buffer_position = (gif_data - gif->gif_data);
+	return GIF_OK;
 }
 
 static unsigned int gif_interlaced_line(int height, int y) {
