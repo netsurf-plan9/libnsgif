@@ -48,7 +48,7 @@ typedef struct gif_frame {
   	bool virgin;				/**< whether the frame has previously been used */
 	bool opaque;				/**< whether the frame is totally opaque */
 	bool redraw_required;			/**< whether a forcable screen redraw is required */
-	char disposal_method;			/**< how the previous frame should be disposed; affects plotting */
+	unsigned char disposal_method;		/**< how the previous frame should be disposed; affects plotting */
 	bool transparency;	 		/**< whether we acknoledge transparency */
 	unsigned char transparency_index;	/**< the index designating a transparent pixel */
 	unsigned int redraw_x;			/**< x co-ordinate of redraw rectangle */
@@ -99,7 +99,7 @@ typedef struct gif_animation {
 	unsigned int *local_colour_table;	/**< local colour table */
 	int dirty_frame;			/**< the current dirty frame, or -1 for none */
 	void *frame_image;			/**< currently decoded image; stored as bitmap from bitmap_create callback */
-	gif_result current_error;			/**< current error type, or 0 for none*/
+	gif_result current_error;		/**< current error type, or 0 for none*/
 } gif_animation;
 
 gif_result gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);

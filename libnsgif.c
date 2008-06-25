@@ -66,9 +66,8 @@
 /*	TO-DO LIST
 	=================
 
-	+ Correct the usage of the background_action variable, which is actually
-	an implementation of the "Disposal Method" flag in the Graphic Control
-	Extension.
+	+ Plain text and comment extensions could be implemented if there is any
+	interest in doing so.
 */
 
 
@@ -82,14 +81,20 @@
 */
 #define GIF_PROCESS_COLOURS 0xaa000000
 
+/*	Internal flag that a frame is invalid/unprocessed
+*/
+#define GIF_INVALID_FRAME -1
+
 /*	Maximum LZW bits available
 */
 #define GIF_MAX_LZW 12
 
 /*	GIF Flags
 */
-#define GIF_DISPOSE_RESTORE_TO_BG 2
-#define GIF_DISPOSE_RESTORE_TO_PREV 3
+#define GIF_FRAME_COMBINE 1
+#define GIF_FRAME_CLEAR 2
+#define GIF_FRAME_RESTORE 3
+#define GIF_FRAME_QUIRKS_RESTORE 4
 #define GIF_IMAGE_SEPARATOR 0x2c
 #define GIF_INTERLACE_MASK 0x40
 #define GIF_COLOUR_TABLE_MASK 0x80
@@ -188,7 +193,7 @@ gif_result gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bit
 		*/
 		gif->frame_count = 0;
 		gif->frame_count_partial = 0;
-		gif->decoded_frame = -1;
+		gif->decoded_frame = GIF_INVALID_FRAME;
 
 		/* 6-byte GIF file header is:
 		 *
@@ -224,7 +229,7 @@ gif_result gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bit
 		gif->colour_table_size = (2 << (gif_data[4] & GIF_COLOUR_TABLE_SIZE_MASK));
 		gif->background_colour = gif_data[5];
 		gif->aspect_ratio = gif_data[6];
-		gif->dirty_frame = -1;
+		gif->dirty_frame = GIF_INVALID_FRAME;
 		gif->loop_count = 1;
 		gif_data += 7;
 
@@ -368,7 +373,7 @@ static gif_result gif_initialise_sprite(struct gif_animation *gif, unsigned int 
 
 	/*	Invalidate our currently decoded image
 	*/
-	gif->decoded_frame = -1;
+	gif->decoded_frame = GIF_INVALID_FRAME;
 	return GIF_OK;
 }
 
@@ -445,7 +450,7 @@ static gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_cal
 	/*	Invalidate any previous decoding we have of this frame
 	*/
 	if (gif->decoded_frame == frame)
-		gif->decoded_frame = -1;
+		gif->decoded_frame = GIF_INVALID_FRAME;
 
 	/*	We pretend to initialise the frames, but really we just skip over all
 		the data contained within. This is all basically a cut down version of
@@ -508,8 +513,8 @@ static gif_result gif_initialise_frame(struct gif_animation *gif, gif_bitmap_cal
 	/*	if we are clearing the background then we need to redraw enough to cover the previous
 		frame too
 	*/
-	gif->frames[frame].redraw_required = ((gif->frames[frame].disposal_method == GIF_DISPOSE_RESTORE_TO_BG) ||
-						(gif->frames[frame].disposal_method == GIF_DISPOSE_RESTORE_TO_PREV));
+	gif->frames[frame].redraw_required = ((gif->frames[frame].disposal_method == GIF_FRAME_CLEAR) ||
+						(gif->frames[frame].disposal_method == GIF_FRAME_RESTORE));
 
 	/*	Boundary checking - shouldn't ever happen except with junk data
 	*/
@@ -616,6 +621,13 @@ static gif_result gif_initialise_frame_extensions(struct gif_animation *gif, con
 					gif->frames[frame].transparency_index = gif_data[5];
 				}
 				gif->frames[frame].disposal_method = ((gif_data[2] & GIF_DISPOSAL_MASK) >> 2);
+				/*	I have encountered documentation and GIFs in the wild that use
+				 *	0x04 to restore the previous frame, rather than the officially
+				 *	documented 0x03.  I believe some (older?) software may even actually
+				 *	export this way.  We handle this as a type of "quirks" mode.
+				*/
+				if (gif->frames[frame].disposal_method == GIF_FRAME_QUIRKS_RESTORE)
+					gif->frames[frame].disposal_method = GIF_FRAME_RESTORE;
 				gif_data += (2 + gif_data[1]);
 				break;
 
@@ -630,11 +642,12 @@ static gif_result gif_initialise_frame_extensions(struct gif_animation *gif, con
 			case GIF_EXTENSION_APPLICATION:
 				if (gif_bytes < 17) return GIF_INSUFFICIENT_FRAME_DATA;
 				if ((gif_data[1] == 0x0b) &&
-					(strncmp((const char *) gif_data + 3,
+					(strncmp((const char *) gif_data + 2,
 						"NETSCAPE2.0", 11) == 0) &&
 					(gif_data[13] == 0x03) &&
-					(gif_data[14] == 0x01))
+					(gif_data[14] == 0x01)) {
 						gif->loop_count = gif_data[15] | (gif_data[16] << 8);
+				}
 				gif_data += (2 + gif_data[1]);
 				break;
 
@@ -696,6 +709,7 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 	unsigned int return_value = 0;
 	unsigned int x, y, decode_y, burst_bytes;
 	unsigned int block_size;
+	int last_undisposed_frame = (frame - 1);
 	register unsigned char colour;
 
 	/*	Ensure this frame is supposed to be decoded
@@ -716,14 +730,14 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 	*/
 	if (!clear_image) {
 	  	if (frame == 0)
-	  		gif->dirty_frame = -1;
+	  		gif->dirty_frame = GIF_INVALID_FRAME;
 		if (gif->decoded_frame == gif->dirty_frame) {
 			clear_image = true;
 			if (frame != 0)
 				gif_decode_frame(gif, gif->dirty_frame, bitmap_callbacks);
 			clear_image = false;
 		}
-		gif->dirty_frame = -1;
+		gif->dirty_frame = GIF_INVALID_FRAME;
 	}
 
 	/*	Get the start of our frame data and the end of the GIF data
@@ -736,19 +750,6 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 	 *	The shortest block of data is a 10-byte image descriptor + 1-byte gif trailer
 	*/
 	if (gif_bytes < 12) return GIF_INSUFFICIENT_FRAME_DATA;
-
-	/*	Clear the previous frame totally. We can't just pretend we've got a smaller
-		sprite and clear what we need as some frames have multiple images which would
-		produce errors.
-	*/
-	frame_data = (unsigned int *)bitmap_callbacks->bitmap_get_buffer(gif->frame_image);
-	if (!frame_data)
-		return GIF_INSUFFICIENT_MEMORY;
-	if (!clear_image) {
-		if ((frame == 0) || (gif->decoded_frame == -1))
-			memset((char*)frame_data, 0x00, gif->width * gif->height * sizeof(int));
-		gif->decoded_frame = frame;
-	}
 
 	/*	Save the buffer position
 	*/
@@ -844,6 +845,12 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 		goto gif_decode_frame_exit;
 	}
 
+	/*	Get the frame data
+	*/
+	frame_data = (unsigned int *)bitmap_callbacks->bitmap_get_buffer(gif->frame_image);
+	if (!frame_data)
+		return GIF_INSUFFICIENT_MEMORY;
+
 	/*	If we are clearing the image we just clear, if not decode
 	*/
 	if (!clear_image) {
@@ -859,11 +866,36 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 			goto gif_decode_frame_exit;
 		}
 
-		/*	Set our dirty status
+		/*	If the previous frame's disposal method requires we restore the background
+		 *	colour or this is the first frame, clear the frame data
 		*/
-		if ((gif->frames[frame].disposal_method == GIF_DISPOSE_RESTORE_TO_BG) ||
-			(gif->frames[frame].disposal_method == GIF_DISPOSE_RESTORE_TO_PREV))
-			gif->dirty_frame = frame;
+		if ((frame == 0) || (gif->decoded_frame == GIF_INVALID_FRAME)) {
+			memset((char*)frame_data, colour_table[gif->background_colour], gif->width * gif->height * sizeof(int));
+		} else if ((frame != 0) && (gif->frames[frame - 1].disposal_method == GIF_FRAME_CLEAR)) {
+			clear_image = true;
+			if ((return_value = gif_decode_frame(gif, (frame - 1), bitmap_callbacks)) != GIF_OK)
+				goto gif_decode_frame_exit;
+			clear_image = false;
+		/*	If the previous frame's disposal method requires we restore the previous
+		 *	image, find the last image set to "do not dispose" and get that frame data
+		*/
+		} else if ((frame != 0) && (gif->frames[frame - 1].disposal_method == GIF_FRAME_RESTORE)) {
+			while ((last_undisposed_frame != -1) && (gif->frames[--last_undisposed_frame].disposal_method == GIF_FRAME_RESTORE));
+				/*	If we don't find one, clear the frame data
+				*/
+				if (last_undisposed_frame == -1) {
+					memset((char*)frame_data, colour_table[gif->background_colour], gif->width * gif->height * sizeof(int));
+				} else {
+					if ((return_value = gif_decode_frame(gif, last_undisposed_frame, bitmap_callbacks)) != GIF_OK)
+						goto gif_decode_frame_exit;
+					/*	Get this frame's data
+					*/
+					frame_data = (unsigned int *)bitmap_callbacks->bitmap_get_buffer(gif->frame_image);
+					if (!frame_data)
+						return GIF_INSUFFICIENT_MEMORY;
+				}
+		}
+		gif->decoded_frame = frame;
 
 		/*	Initialise the LZW decoding
 		*/
@@ -921,11 +953,10 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 	} else {
 		/*	Clear our frame
 		*/
-		if ((gif->frames[frame].disposal_method == GIF_DISPOSE_RESTORE_TO_BG) ||
-			(gif->frames[frame].disposal_method == GIF_DISPOSE_RESTORE_TO_PREV)) {
+		if (gif->frames[frame].disposal_method == GIF_FRAME_CLEAR) {
 			for (y = 0; y < height; y++) {
 				frame_scanline = frame_data + offset_x + ((offset_y + y) * gif->width);
-				memset(frame_scanline, 0x00, width * 4);
+				memset(frame_scanline, colour_table[gif->background_colour], width * 4);
 			}
 		}
 
