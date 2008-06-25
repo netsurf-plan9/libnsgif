@@ -39,18 +39,6 @@ typedef enum {
 	GIF_FRAME_NO_DISPLAY = -6
 } gif_result;
 
-/*	Maximum colour table size
-*/
-#define GIF_MAX_COLOURS 256
-
-/*	Maximum LZW bits available
-*/
-#define GIF_MAX_LZW 12
-
-/* 1-byte GIF Trailer "[indicates] the end of the GIF Data Stream" (fixed value: 0x3b)
-*/
-#define GIF_TRAILER 0x3b
-
 /*	The GIF frame data
 */
 typedef struct gif_frame {
@@ -60,6 +48,9 @@ typedef struct gif_frame {
   	bool virgin;				/**< whether the frame has previously been used */
 	bool opaque;				/**< whether the frame is totally opaque */
 	bool redraw_required;			/**< whether a forcable screen redraw is required */
+	char disposal_method;			/**< how the previous frame should be disposed; affects plotting */
+	bool transparency;	 		/**< whether we acknoledge transparency */
+	unsigned char transparency_index;	/**< the index designating a transparent pixel */
 	unsigned int redraw_x;			/**< x co-ordinate of redraw rectangle */
 	unsigned int redraw_y;			/**< y co-ordinate of redraw rectangle */
 	unsigned int redraw_width;		/**< width of redraw rectangle */
@@ -108,7 +99,7 @@ typedef struct gif_animation {
 	unsigned int *local_colour_table;	/**< local colour table */
 	int dirty_frame;			/**< the current dirty frame, or -1 for none */
 	void *frame_image;			/**< currently decoded image; stored as bitmap from bitmap_create callback */
-	int current_error;			/**< current error type, or 0 for none*/
+	gif_result current_error;			/**< current error type, or 0 for none*/
 } gif_animation;
 
 gif_result gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
