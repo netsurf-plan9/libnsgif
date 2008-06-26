@@ -26,7 +26,7 @@
 #include <sys/stat.h>
 #include <libnsgif.h>
 
-char *load_file(const char *path, size_t *data_size);
+unsigned char *load_file(const char *path, size_t *data_size);
 void warning(const char *context, int code);
 void *bitmap_create(int width, int height);
 void bitmap_set_opaque(void *bitmap, bool opaque);
@@ -36,19 +36,18 @@ void bitmap_destroy(void *bitmap);
 void bitmap_modified(void *bitmap);
 
 
-gif_bitmap_callback_vt bitmap_callbacks = {
-	bitmap_create,
-	bitmap_destroy,
-	bitmap_get_buffer,
-	bitmap_set_opaque,
-	bitmap_test_opaque,
-	bitmap_modified
-};
-
-
 int main(int argc, char *argv[])
 {
-	struct gif_animation gif;
+	gif_animation gif = {
+		.bitmap_callbacks = {
+			bitmap_create,
+			bitmap_destroy,
+			bitmap_get_buffer,
+			bitmap_set_opaque,
+			bitmap_test_opaque,
+			bitmap_modified
+		}
+	};
 	size_t size;
 	int code;
 	unsigned int i;
@@ -58,17 +57,15 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	/* load file into memory */
-	char *data = load_file(argv[1], &size);
+	/* create our gif animation */
+	gif_create(&gif);
 
-	/* initialise gif_animation structure */
-	gif.buffer_size = size;
-	gif.gif_data = (unsigned char *) data;
-	gif.buffer_position = 0;
+	/* load file into memory */
+	unsigned char *data = load_file(argv[1], &size);
 
 	/* begin decoding */
 	do {
-		code = gif_initialise(&gif, &bitmap_callbacks);
+		code = gif_initialise(&gif, size, data);
 		if (code != GIF_OK && code != GIF_WORKING) {
 			warning("gif_initialise", code);
 			exit(1);
@@ -81,7 +78,6 @@ int main(int argc, char *argv[])
 	printf("# height               %u \n", gif.height);
 	printf("# frame_count          %u \n", gif.frame_count);
 	printf("# frame_count_partial  %u \n", gif.frame_count_partial);
-	printf("# background_colour    %x \n", gif.background_colour);
 	printf("# loop_count           %u \n", gif.loop_count);
 	printf("%u %u 256\n", gif.width, gif.height * gif.frame_count);
 
@@ -90,7 +86,7 @@ int main(int argc, char *argv[])
 		unsigned int row, col;
 		char *image;
 
-		code = gif_decode_frame(&gif, i, &bitmap_callbacks);
+		code = gif_decode_frame(&gif, i);
 		if (code != GIF_OK)
 			warning("gif_decode_frame", code);
 
@@ -108,15 +104,18 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* clean up */
+	gif_finalise(&gif);
+
 	return 0;
 }
 
 
-char *load_file(const char *path, size_t *data_size)
+unsigned char *load_file(const char *path, size_t *data_size)
 {
 	FILE *fd;
 	struct stat sb;
-	char *buffer;
+	unsigned char *buffer;
 	size_t size;
 	size_t n;
 
