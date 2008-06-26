@@ -108,7 +108,7 @@ typedef struct gif_animation {
 	unsigned int *local_colour_table;		/**< local colour table */
 } gif_animation;
 
-void gif_create(gif_animation *gif);
+void gif_create(gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks);
 gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data);
 gif_result gif_decode_frame(gif_animation *gif, unsigned int frame);
 void gif_finalise(gif_animation *gif);

@@ -150,7 +150,8 @@ static bool clear_image = false;
 
 /**	Initialises necessary gif_animation members.
 */
-void gif_create(gif_animation *gif) {
+void gif_create(gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
+	gif->bitmap_callbacks = *bitmap_callbacks;
 	gif->gif_data = NULL;
 	gif->frame_image = NULL;
 	gif->frames = NULL;
@@ -714,6 +715,7 @@ static gif_result gif_initialise_frame_extensions(gif_animation *gif, const int 
 		GIF_INSUFFICIENT_FRAME_DATA for insufficient data to complete the frame
 		GIF_DATA_ERROR for GIF error (invalid frame header)
 		GIF_INSUFFICIENT_DATA for insufficient data to do anything
+		GIF_INSUFFICIENT_MEMORY for insufficient memory to process
 		GIF_OK for successful decoding
 		If a frame does not contain any image data, GIF_OK is returned and
 			gif->current_error is set to GIF_FRAME_NO_DISPLAY

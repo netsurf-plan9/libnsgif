@@ -38,16 +38,15 @@ void bitmap_modified(void *bitmap);
 
 int main(int argc, char *argv[])
 {
-	gif_animation gif = {
-		.bitmap_callbacks = {
-			bitmap_create,
-			bitmap_destroy,
-			bitmap_get_buffer,
-			bitmap_set_opaque,
-			bitmap_test_opaque,
-			bitmap_modified
-		}
+	gif_bitmap_callback_vt bitmap_callbacks = {
+		bitmap_create,
+		bitmap_destroy,
+		bitmap_get_buffer,
+		bitmap_set_opaque,
+		bitmap_test_opaque,
+		bitmap_modified
 	};
+	gif_animation gif;
 	size_t size;
 	int code;
 	unsigned int i;
@@ -58,7 +57,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* create our gif animation */
-	gif_create(&gif);
+	gif_create(&gif, &bitmap_callbacks);
 
 	/* load file into memory */
 	unsigned char *data = load_file(argv[1], &size);
@@ -106,6 +105,7 @@ int main(int argc, char *argv[])
 
 	/* clean up */
 	gif_finalise(&gif);
+	free(data);
 
 	return 0;
 }
