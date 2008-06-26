@@ -97,7 +97,6 @@ typedef struct gif_animation {
 	bool global_colours;			/**< whether the GIF has a global colour table */
 	unsigned int *global_colour_table;	/**< global colour table */
 	unsigned int *local_colour_table;	/**< local colour table */
-	int dirty_frame;			/**< the current dirty frame, or -1 for none */
 	void *frame_image;			/**< currently decoded image; stored as bitmap from bitmap_create callback */
 	gif_result current_error;		/**< current error type, or 0 for none*/
 } gif_animation;

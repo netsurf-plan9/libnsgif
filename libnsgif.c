@@ -229,7 +229,6 @@ gif_result gif_initialise(struct gif_animation *gif, gif_bitmap_callback_vt *bit
 		gif->colour_table_size = (2 << (gif_data[4] & GIF_COLOUR_TABLE_SIZE_MASK));
 		gif->background_colour = gif_data[5];
 		gif->aspect_ratio = gif_data[6];
-		gif->dirty_frame = GIF_INVALID_FRAME;
 		gif->loop_count = 1;
 		gif_data += 7;
 
@@ -726,20 +725,6 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 	if ((!clear_image) && ((int)frame == gif->decoded_frame))
 		return GIF_OK;
 
-	/*	If the previous frame was dirty, remove it
-	*/
-	if (!clear_image) {
-	  	if (frame == 0)
-	  		gif->dirty_frame = GIF_INVALID_FRAME;
-		if (gif->decoded_frame == gif->dirty_frame) {
-			clear_image = true;
-			if (frame != 0)
-				gif_decode_frame(gif, gif->dirty_frame, bitmap_callbacks);
-			clear_image = false;
-		}
-		gif->dirty_frame = GIF_INVALID_FRAME;
-	}
-
 	/*	Get the start of our frame data and the end of the GIF data
 	*/
 	gif_data = gif->gif_data + gif->frames[frame].frame_pointer;
@@ -822,8 +807,7 @@ gif_result gif_decode_frame(struct gif_animation *gif, unsigned int frame, gif_b
 		colour_table = gif->local_colour_table;
 		if (!clear_image) {
 			for (index = 0; index < colour_table_size; index++) {
-				char colour[] = {gif_data[0], gif_data[1],
-						gif_data[2], (char)0xff};
+				char colour[] = {gif_data[0], gif_data[1], gif_data[2], (char)0xff};
 				colour_table[index] = *((int *) colour);
 				gif_data += 3;
 			}
