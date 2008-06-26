@@ -59,7 +59,8 @@
 	or perform the check itself.
 
 	It should be noted that gif_finalise() should always be called, even if
-	no frames were initialised.
+	no frames were initialised.  Additionally, it is the responsibility of
+	the caller to free 'gif_data'.
 
 	[rjw] - Fri 2nd April 2004
 */
@@ -1100,8 +1101,6 @@ void gif_finalise(gif_animation *gif) {
 	gif->local_colour_table = NULL;
 	free(gif->global_colour_table);
 	gif->global_colour_table = NULL;
-	free(gif->gif_data);
-	gif->gif_data = NULL;
 }
 
 /**

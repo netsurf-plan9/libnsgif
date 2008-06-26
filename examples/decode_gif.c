@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
 	};
 	gif_animation gif;
 	size_t size;
-	int code;
+	gif_result code;
 	unsigned int i;
 
 	if (argc != 2) {
@@ -151,7 +151,7 @@ unsigned char *load_file(const char *path, size_t *data_size)
 }
 
 
-void warning(const char *context, int code)
+void warning(const char *context, gif_result code)
 {
 	fprintf(stderr, "%s failed: ", context);
 	switch (code)
