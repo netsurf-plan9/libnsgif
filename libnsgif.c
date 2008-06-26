@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 #include "libnsgif.h"
 #include "utils/log.h"
 
@@ -303,6 +304,7 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 
 		/*	Initialise the sprite header
 		*/
+		assert(gif->bitmap_callbacks.bitmap_create);
 		if ((gif->frame_image = gif->bitmap_callbacks.bitmap_create(gif->width, gif->height)) == NULL) {
 			gif_finalise(gif);
 			return GIF_INSUFFICIENT_MEMORY;
@@ -382,8 +384,10 @@ static gif_result gif_initialise_sprite(gif_animation *gif, unsigned int width, 
 
 	/*	Allocate some more memory
 	*/
+	assert(gif->bitmap_callbacks.bitmap_create);
 	if ((buffer = gif->bitmap_callbacks.bitmap_create(max_width, max_height)) == NULL)
 		return GIF_INSUFFICIENT_MEMORY;
+	assert(gif->bitmap_callbacks.bitmap_destroy);
 	gif->bitmap_callbacks.bitmap_destroy(gif->frame_image);
 	gif->frame_image = buffer;
 	gif->width = max_width;
@@ -850,6 +854,7 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 
 	/*	Get the frame data
 	*/
+	assert(gif->bitmap_callbacks.bitmap_get_buffer);
 	frame_data = (unsigned int *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
 	if (!frame_data)
 		return GIF_INSUFFICIENT_MEMORY;
@@ -893,6 +898,7 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 						goto gif_decode_frame_exit;
 					/*	Get this frame's data
 					*/
+					assert(gif->bitmap_callbacks.bitmap_get_buffer);
 					frame_data = (unsigned int *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
 					if (!frame_data)
 						return GIF_INSUFFICIENT_MEMORY;
@@ -987,11 +993,16 @@ gif_decode_frame_exit:
 	/*	Check if we should test for optimisation
 	*/
 	if (gif->frames[frame].virgin) {
-		gif->frames[frame].opaque = gif->bitmap_callbacks.bitmap_test_opaque(gif->frame_image);
+		if (gif->bitmap_callbacks.bitmap_test_opaque)
+			gif->frames[frame].opaque = gif->bitmap_callbacks.bitmap_test_opaque(gif->frame_image);
+		else
+			gif->frames[frame].opaque = false;
 		gif->frames[frame].virgin = false;
 	}
-	gif->bitmap_callbacks.bitmap_set_opaque(gif->frame_image, gif->frames[frame].opaque);
-	gif->bitmap_callbacks.bitmap_modified(gif->frame_image);
+	if (gif->bitmap_callbacks.bitmap_set_opaque)
+		gif->bitmap_callbacks.bitmap_set_opaque(gif->frame_image, gif->frames[frame].opaque);
+	if (gif->bitmap_callbacks.bitmap_modified)
+		gif->bitmap_callbacks.bitmap_modified(gif->frame_image);
 
 	/*	Restore the buffer position
 	*/
@@ -1076,8 +1087,10 @@ static unsigned int gif_interlaced_line(int height, int y) {
 void gif_finalise(gif_animation *gif) {
 	/*	Release all our memory blocks
 	*/
-	if (gif->frame_image)
+	if (gif->frame_image) {
+		assert(gif->bitmap_callbacks.bitmap_destroy);
 		gif->bitmap_callbacks.bitmap_destroy(gif->frame_image);
+	}
 	gif->frame_image = NULL;
 	free(gif->frames);
 	gif->frames = NULL;

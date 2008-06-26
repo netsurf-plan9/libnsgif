@@ -74,6 +74,8 @@ typedef struct gif_bitmap_callback_vt {
 	gif_bitmap_cb_create bitmap_create;		/**< Create a bitmap. */
 	gif_bitmap_cb_destroy bitmap_destroy;		/**< Free a bitmap. */
 	gif_bitmap_cb_get_buffer bitmap_get_buffer;	/**< Return a pointer to the pixel data in a bitmap. */
+	/**	Members below are optional
+	*/
 	gif_bitmap_cb_set_opaque bitmap_set_opaque;	/**< Sets whether a bitmap should be plotted opaque. */
 	gif_bitmap_cb_test_opaque bitmap_test_opaque;	/**< Tests whether a bitmap has an opaque alpha channel. */
 	gif_bitmap_cb_modified bitmap_modified;	/**< The bitmap image has changed, so flush any persistant cache. */
