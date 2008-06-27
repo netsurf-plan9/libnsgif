@@ -83,14 +83,14 @@ int main(int argc, char *argv[])
 	/* decode the frames */
 	for (i = 0; i != gif.frame_count; i++) {
 		unsigned int row, col;
-		char *image;
+		unsigned char *image;
 
 		code = gif_decode_frame(&gif, i);
 		if (code != GIF_OK)
 			warning("gif_decode_frame", code);
 
 		printf("# frame %u:\n", i);
-		image = (char *) gif.frame_image;
+		image = (unsigned char *) gif.frame_image;
 		for (row = 0; row != gif.height; row++) {
 			for (col = 0; col != gif.width; col++) {
 				size_t z = (row * gif.width + col) * 4;

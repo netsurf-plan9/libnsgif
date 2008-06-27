@@ -149,20 +149,16 @@ static bool get_done;
 */
 static bool clear_image = false;
 
+
+
 /**	Initialises necessary gif_animation members.
 */
 void gif_create(gif_animation *gif, gif_bitmap_callback_vt *bitmap_callbacks) {
+	memset(gif, 0, sizeof(gif_animation));
 	gif->bitmap_callbacks = *bitmap_callbacks;
-	gif->gif_data = NULL;
-	gif->frame_image = NULL;
-	gif->frames = NULL;
-	gif->local_colour_table = NULL;
-	gif->global_colour_table = NULL;
-	gif->buffer_position = 0;
-	gif->frame_count = 0;
-	gif->frame_count_partial = 0;
 	gif->decoded_frame = GIF_INVALID_FRAME;
 }
+
 
 /**	Initialises any workspace held by the animation and attempts to decode
 	any information that hasn't already been decoded.
@@ -361,7 +357,6 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 	*/
 	return return_value;
 }
-
 
 
 /**	Updates the sprite memory size
