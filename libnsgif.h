@@ -63,7 +63,7 @@ typedef struct gif_frame {
 */
 typedef void* (*gif_bitmap_cb_create)(int width, int height);
 typedef void (*gif_bitmap_cb_destroy)(void *bitmap);
-typedef char* (*gif_bitmap_cb_get_buffer)(void *bitmap);
+typedef unsigned char* (*gif_bitmap_cb_get_buffer)(void *bitmap);
 typedef void (*gif_bitmap_cb_set_opaque)(void *bitmap, bool opaque);
 typedef bool (*gif_bitmap_cb_test_opaque)(void *bitmap);
 typedef void (*gif_bitmap_cb_modified)(void *bitmap);

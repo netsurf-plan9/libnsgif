@@ -31,7 +31,7 @@ void warning(const char *context, int code);
 void *bitmap_create(int width, int height);
 void bitmap_set_opaque(void *bitmap, bool opaque);
 bool bitmap_test_opaque(void *bitmap);
-char *bitmap_get_buffer(void *bitmap);
+unsigned char *bitmap_get_buffer(void *bitmap);
 void bitmap_destroy(void *bitmap);
 void bitmap_modified(void *bitmap);
 
@@ -199,7 +199,7 @@ bool bitmap_test_opaque(void *bitmap)
 }
 
 
-char *bitmap_get_buffer(void *bitmap)
+unsigned char *bitmap_get_buffer(void *bitmap)
 {
 	assert(bitmap);
 	return bitmap;
