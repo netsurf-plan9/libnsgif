@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <libnsgif.h>
+#include "../libnsgif.h"
 
 unsigned char *load_file(const char *path, size_t *data_size);
 void warning(const char *context, int code);
