@@ -91,6 +91,10 @@
 */
 #define GIF_MAX_LZW 12
 
+/* Transparent colour
+*/
+#define GIF_TRANSPARENT_COLOUR 0x00
+
 /*	GIF Flags
 */
 #define GIF_FRAME_COMBINE 1
@@ -876,7 +880,10 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 		 *	colour or this is the first frame, clear the frame data
 		*/
 		if ((frame == 0) || (gif->decoded_frame == GIF_INVALID_FRAME)) {
-			memset((char*)frame_data, colour_table[gif->background_index], gif->width * gif->height * sizeof(int));
+			memset((char*)frame_data, GIF_TRANSPARENT_COLOUR, gif->width * gif->height * sizeof(int));
+			/* The line below would fill the image with its background color, but because GIFs support
+			 * transparency we likely wouldn't want to do that. */
+			/* memset((char*)frame_data, colour_table[gif->background_index], gif->width * gif->height * sizeof(int)); */
 		} else if ((frame != 0) && (gif->frames[frame - 1].disposal_method == GIF_FRAME_CLEAR)) {
 			clear_image = true;
 			if ((return_value = gif_decode_frame(gif, (frame - 1))) != GIF_OK)
@@ -890,7 +897,8 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 				/*	If we don't find one, clear the frame data
 				*/
 				if (last_undisposed_frame == -1) {
-					memset((char*)frame_data, colour_table[gif->background_index], gif->width * gif->height * sizeof(int));
+					/* see notes above on transparency vs. background color */
+					memset((char*)frame_data, GIF_TRANSPARENT_COLOUR, gif->width * gif->height * sizeof(int));
 				} else {
 					if ((return_value = gif_decode_frame(gif, last_undisposed_frame)) != GIF_OK)
 						goto gif_decode_frame_exit;
