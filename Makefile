@@ -1,58 +1,89 @@
-AR = ar
-CC = gcc
-LD = gcc
-DOXYGEN = doxygen
-INSTALL = install
-SED = sed
-MKDIR = mkdir
-PKG_CONFIG = pkg-config
+#
+# This file is part of Libnsgif
+#
 
-ARFLAGS = -cru
-CFLAGS = -g -Wall -Wextra -Wundef -Wpointer-arith -Wcast-align \
+SOURCE = libnsgif.c
+HDRS = libnsgif.h utils/log.h
+
+CFLAGS = -Wall -Wextra -Wundef -Wpointer-arith -Wcast-align \
 	-Wwrite-strings -Wstrict-prototypes \
-	-Wnested-externs -Werror -pedantic -std=c99 \
+	-Wnested-externs -pedantic -std=c99 \
 	-Wno-format-zero-length -Wformat-security -Wstrict-aliasing=2 \
 	-Wmissing-format-attribute -Wunused -Wunreachable-code \
 	-Wformat=2 -Werror-implicit-function-declaration \
 	-Wmissing-declarations -Wmissing-prototypes
-LDFLAGS = -g -L./
+ARFLAGS = -cr
+INSTALL = install
+SED = sed
+DOXYGEN = doxygen
 
-# Installation prefix, if not already defined (e.g. on command line)
-PREFIX ?= /usr/local
-DESTDIR ?=
+ifeq ($(TARGET),riscos)
+GCCSDK_INSTALL_CROSSBIN ?= /home/riscos/cross/bin
+GCCSDK_INSTALL_ENV ?= /home/riscos/env
+CC = $(GCCSDK_INSTALL_CROSSBIN)/gcc
+AR = $(GCCSDK_INSTALL_CROSSBIN)/ar
+CFLAGS += -Driscos -mpoke-function-name -I$(GCCSDK_INSTALL_ENV)/include
+LIBS = -L$(GCCSDK_INSTALL_ENV)/lib
+EXEEXT ?= ,ff8
+PREFIX = $(GCCSDK_INSTALL_ENV)
+else
+CFLAGS += -g
+LIBS =
+PREFIX = /usr/local
+endif
+
+ifeq ($(TARGET),)
+OBJDIR = objects
+LIBDIR = lib
+BINDIR = bin
+else
+OBJDIR = $(TARGET)-objects
+LIBDIR = $(TARGET)-lib
+BINDIR = $(TARGET)-bin
+endif
+
+OBJS = $(addprefix $(OBJDIR)/, $(SOURCE:.c=.o))
 
 .PHONY: all clean docs install uninstall
 
-all: libnsgif.a bin/decode_gif
-	
-libnsgif.a: libnsgif.o libnsgif.pc
-	${AR} ${ARFLAGS} libnsgif.a libnsgif.o
+all: $(LIBDIR)/libnsgif.a $(BINDIR)/decode_gif$(EXEEXT)
 
-libnsgif.pc: libnsgif.pc.in
-	$(SED) -e 's#PREFIX#$(PREFIX)#' libnsgif.pc.in > libnsgif.pc
+$(LIBDIR)/libnsgif.a: $(OBJS) $(LIBDIR)/libnsgif.pc
+	@echo "    LINK:" $@
+	@mkdir -p $(LIBDIR)
+	@$(AR) $(ARFLAGS) $@ $(OBJS)
 
-%.o: %.c
-	${CC} -c ${CFLAGS} -o $@ $<
+$(LIBDIR)/libnsgif.pc: libnsgif.pc.in
+	@echo "     SED:" $@
+	@mkdir -p $(LIBDIR)
+	@$(SED) -e 's#PREFIX#$(PREFIX)#' $^ > $@
 
-bin/decode_gif: examples/decode_gif.c libnsgif.a
-	${CC} ${CFLAGS} -o $@ $< libnsgif.a
+$(BINDIR)/decode_gif$(EXEEXT): examples/decode_gif.c $(LIBDIR)/libnsgif.a
+	@echo "    LINK:" $@
+	@mkdir -p $(BINDIR)
+	@$(CC) $(CFLAGS) -I. -o $@ $^
+
+$(OBJDIR)/%.o: %.c $(HDRS)
+	@echo " COMPILE:" $<
+	@mkdir -p $(OBJDIR)
+	@$(CC) $(CFLAGS) -c -o $@ $<
 
 docs:
 	${DOXYGEN}
 
-clean:
-	rm -f $(wildcard *.o) $(wildcard *.a) libnsgif.pc
-	rm -rf doc
-
-install: libnsgif.a libnsgif.pc
-	$(MKDIR) -p $(DESTDIR)$(PREFIX)/lib/pkgconfig
-	$(MKDIR) -p $(DESTDIR)$(PREFIX)/lib
-	$(MKDIR) -p $(DESTDIR)$(PREFIX)/include
-	$(INSTALL) --mode=644 -t $(DESTDIR)$(PREFIX)/lib libnsgif.a
-	$(INSTALL) --mode=644 -t $(DESTDIR)$(PREFIX)/include libnsgif.h
-	$(INSTALL) --mode=644 -t $(DESTDIR)$(PREFIX)/lib/pkgconfig libnsgif.pc
+install: $(LIBDIR)/libnsgif.a $(LIBDIR)/libnsgif.pc
+	mkdir -p $(PREFIX)/lib/pkgconfig
+	mkdir -p $(PREFIX)/lib
+	mkdir -p $(PREFIX)/include
+	$(INSTALL) --mode=644 -t $(PREFIX)/lib $(LIBDIR)/libnsgif.a
+	$(INSTALL) --mode=644 -t $(PREFIX)/include libnsgif.h
+	$(INSTALL) --mode=644 -t $(PREFIX)/lib/pkgconfig $(LIBDIR)/libnsgif.pc
 
 uninstall:
-	rm $(DESTDIR)$(PREFIX)/lib/libnsgif.a
-	rm $(DESTDIR)$(PREFIX)/include/libnsgif.h
-	rm $(DESTDIR)$(PREFIX)/lib/pkgconfig/libnsgif.pc
+	rm $(PREFIX)/lib/libnsgif.a
+	rm $(PREFIX)/include/libnsgif.h
+	rm $(PREFIX)/lib/pkgconfig/libnsgif.pc
+
+clean:
+	-rm $(OBJS) $(LIBDIR)/libnsgif.a $(LIBDIR)/libnsgif.pc $(BINDIR)/decode_gif$(EXEEXT)
+	-rm -rf doc
