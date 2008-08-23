@@ -112,6 +112,7 @@
 #define GIF_EXTENSION_COMMENT 0xfe
 #define GIF_EXTENSION_PLAIN_TEXT 0x01
 #define GIF_EXTENSION_APPLICATION 0xff
+#define GIF_BLOCK_TERMINATOR 0x00
 #define GIF_TRAILER 0x3b
 
 /*	Internal GIF routines
@@ -694,12 +695,13 @@ static gif_result gif_initialise_frame_extensions(gif_animation *gif, const int 
 		*/
 		gif_bytes = (gif_end - gif_data);
 		block_size = 0;
-		while (block_size != 1) {
+		while (gif_data[0] != GIF_BLOCK_TERMINATOR) {
 			block_size = gif_data[0] + 1;
 			if ((gif_bytes -= block_size) < 0)
 				return GIF_INSUFFICIENT_FRAME_DATA;
 			gif_data += block_size;
 		}
+		++gif_data;
 	}
 
 	/*	Set buffer position and return
@@ -732,7 +734,6 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 	unsigned int save_buffer_position;
 	unsigned int return_value = 0;
 	unsigned int x, y, decode_y, burst_bytes;
-	unsigned int block_size;
 	int last_undisposed_frame = (frame - 1);
 	register unsigned char colour;
 
@@ -881,6 +882,7 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 		*/
 		if ((frame == 0) || (gif->decoded_frame == GIF_INVALID_FRAME)) {
 			memset((char*)frame_data, GIF_TRANSPARENT_COLOUR, gif->width * gif->height * sizeof(int));
+			gif->decoded_frame = frame;
 			/* The line below would fill the image with its background color, but because GIFs support
 			 * transparency we likely wouldn't want to do that. */
 			/* memset((char*)frame_data, colour_table[gif->background_index], gif->width * gif->height * sizeof(int)); */
@@ -974,27 +976,8 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 				memset(frame_scanline, colour_table[gif->background_index], width * 4);
 			}
 		}
-
-		/*	Repeatedly skip blocks until we get a zero block or run out of data
-		*/
-		gif_bytes = gif->buffer_size - gif->buffer_position;
-		gif_data = gif->gif_data + gif->buffer_size;
-		block_size = 0;
-		while (block_size != 1) {
-			block_size = gif_data[0] + 1;
-			if ((gif_bytes -= block_size) < 0) {
-				return_value = GIF_INSUFFICIENT_FRAME_DATA;
-				goto gif_decode_frame_exit;
-			}
-			gif_data += block_size;
-		}
 	}
 gif_decode_frame_exit:
-	/*	Check for end of data
-	*/
-	gif->buffer_position++;
-	gif_bytes = gif->buffer_size - gif->buffer_position;
-	gif_data = gif->gif_data + gif->buffer_position;
 
 	/*	Check if we should test for optimisation
 	*/
@@ -1064,12 +1047,13 @@ static gif_result gif_skip_frame_extensions(gif_animation *gif) {
 		*/
 		gif_bytes = (gif_end - gif_data);
 		block_size = 0;
-		while (block_size != 1) {
+		while (gif_data[0] != GIF_BLOCK_TERMINATOR) {
 			block_size = gif_data[0] + 1;
 			if ((gif_bytes -= block_size) < 0)
 				return GIF_INSUFFICIENT_FRAME_DATA;
 			gif_data += block_size;
 		}
+		++gif_data;
 	}
 
 	/*	Set buffer position and return
