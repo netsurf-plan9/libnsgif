@@ -38,6 +38,8 @@ else
   PREFIX = /usr/local
 endif
 
+-include Makefile.config
+
 OBJDIR = $(TARGET)$(SUBTARGET)objects
 LIBDIR = $(TARGET)$(SUBTARGET)lib
 BINDIR = $(TARGET)$(SUBTARGET)bin
@@ -72,17 +74,17 @@ docs:
 	${DOXYGEN}
 
 install: $(LIBDIR)/libnsgif.a $(LIBDIR)/libnsgif.pc
-	mkdir -p $(PREFIX)/lib/pkgconfig
-	mkdir -p $(PREFIX)/lib
-	mkdir -p $(PREFIX)/include
-	$(INSTALL) --mode=644 -t $(PREFIX)/lib $(LIBDIR)/libnsgif.a
-	$(INSTALL) --mode=644 -t $(PREFIX)/include libnsgif.h
-	$(INSTALL) --mode=644 -t $(PREFIX)/lib/pkgconfig $(LIBDIR)/libnsgif.pc
+	mkdir -p $(DESTDIR)$(PREFIX)/lib/pkgconfig
+	mkdir -p $(DESTDIR)$(PREFIX)/lib
+	mkdir -p $(DESTDIR)$(PREFIX)/include
+	$(INSTALL) -m 644 $(LIBDIR)/libnsgif.a $(DESTDIR)$(PREFIX)/lib 
+	$(INSTALL) -m 644 libnsgif.h $(DESTDIR)$(PREFIX)/include
+	$(INSTALL) -m 644 $(LIBDIR)/libnsgif.pc $(DESTDIR)$(PREFIX)/lib/pkgconfig
 
 uninstall:
-	rm $(PREFIX)/lib/libnsgif.a
-	rm $(PREFIX)/include/libnsgif.h
-	rm $(PREFIX)/lib/pkgconfig/libnsgif.pc
+	rm $(DESTDIR)$(PREFIX)/lib/libnsgif.a
+	rm $(DESTDIR)$(PREFIX)/include/libnsgif.h
+	rm $(DESTDIR)$(PREFIX)/lib/pkgconfig/libnsgif.pc
 
 clean:
 	-rm $(OBJS) $(LIBDIR)/libnsgif.a $(LIBDIR)/libnsgif.pc $(BINDIR)/decode_gif$(EXEEXT)
