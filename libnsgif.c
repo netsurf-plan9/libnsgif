@@ -319,7 +319,10 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 				return GIF_INSUFFICIENT_DATA;
 			}
 			for (index = 0; index < gif->colour_table_size; index++) {
-				char colour[] = {gif_data[0], gif_data[1], gif_data[2], (char)0xff};
+				char colour[] = {0, 0, 0, (char)0xff};
+				colour[0] = gif_data[0];
+				colour[1] = gif_data[1];
+				colour[2] = gif_data[2];
 				gif->global_colour_table[index] = *((int *) colour);
 				gif_data += 3;
 			}
@@ -823,7 +826,10 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 		colour_table = gif->local_colour_table;
 		if (!clear_image) {
 			for (index = 0; index < colour_table_size; index++) {
-				char colour[] = {gif_data[0], gif_data[1], gif_data[2], (char)0xff};
+				char colour[] = {0, 0, 0, (char)0xff};
+				colour[0] = gif_data[0];
+				colour[1] = gif_data[1];
+				colour[2] = gif_data[2];
 				colour_table[index] = *((int *) colour);
 				gif_data += 3;
 			}
