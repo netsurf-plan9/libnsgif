@@ -36,7 +36,8 @@ typedef enum {
 	GIF_INSUFFICIENT_DATA = -3,
 	GIF_DATA_ERROR = -4,
 	GIF_INSUFFICIENT_MEMORY = -5,
-	GIF_FRAME_NO_DISPLAY = -6
+	GIF_FRAME_NO_DISPLAY = -6,
+	GIF_END_OF_FRAME = -7
 } gif_result;
 
 /*	The GIF frame data

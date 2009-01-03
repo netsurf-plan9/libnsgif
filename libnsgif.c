@@ -574,9 +574,27 @@ static gif_result gif_initialise_frame(gif_animation *gif) {
 	block_size = 0;
 	while (block_size != 1) {
 		block_size = gif_data[0] + 1;
-		if ((gif_bytes -= block_size) < 0)
-			return GIF_INSUFFICIENT_FRAME_DATA;
-		gif_data += block_size;
+		/*	Check if the frame data runs off the end of the file
+		*/
+		if ((int)(gif_bytes - block_size) < 0) {
+			/*	Try to recover by signaling the end of the gif.
+			 *	Once we get garbage data, there is no logical
+			 *	way to determine where the next frame is.
+			 *	It's probably better to partially load the gif
+			 *	than not at all.
+			*/
+			if (gif_bytes >= 2) {
+				gif_data[0] = 0;
+				gif_data[1] = GIF_TRAILER;
+				gif_bytes = 1;
+				++gif_data;
+				break;
+			} else
+				return GIF_INSUFFICIENT_FRAME_DATA;
+		} else {
+			gif_bytes -= block_size;
+			gif_data += block_size;
+		}
 	}
 
 	/*	Add the frame and set the display flag
@@ -957,7 +975,12 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 					}
 				} else {
 					if (!gif_next_LZW(gif)) {
-						return_value = gif->current_error;
+						/*	Unexpected end of frame, try to recover
+						*/
+						if (gif->current_error == GIF_END_OF_FRAME)
+							return_value = GIF_OK;
+						else
+							return_value = gif->current_error;
 						goto gif_decode_frame_exit;
 					}
 				}
@@ -1190,7 +1213,7 @@ static int gif_next_code(gif_animation *gif, int code_size) {
 	end = curbit + code_size;
 	if (end >= lastbit) {
 		if (get_done)
-			return GIF_INSUFFICIENT_FRAME_DATA;
+			return GIF_END_OF_FRAME;
 		buf[0] = direct[last_byte - 2];
 		buf[1] = direct[last_byte - 1];
 
