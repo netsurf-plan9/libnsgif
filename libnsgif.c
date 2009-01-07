@@ -992,7 +992,10 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 		if (gif->frames[frame].disposal_method == GIF_FRAME_CLEAR) {
 			for (y = 0; y < height; y++) {
 				frame_scanline = frame_data + offset_x + ((offset_y + y) * gif->width);
-				memset(frame_scanline, colour_table[gif->background_index], width * 4);
+				if (gif->frames[frame].transparency)
+					memset(frame_scanline, GIF_TRANSPARENT_COLOUR, width * 4);
+				else
+					memset(frame_scanline, colour_table[gif->background_index], width * 4);
 			}
 		}
 	}
