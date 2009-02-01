@@ -40,9 +40,9 @@ endif
 
 -include Makefile.config
 
-OBJDIR = $(TARGET)$(SUBTARGET)objects
-LIBDIR = $(TARGET)$(SUBTARGET)lib
-BINDIR = $(TARGET)$(SUBTARGET)bin
+OBJDIR = build-$(TARGET)$(SUBTARGET)objects
+LIBDIR = build-$(TARGET)$(SUBTARGET)lib
+BINDIR = build-$(TARGET)$(SUBTARGET)bin
 
 OBJS = $(addprefix $(OBJDIR)/, $(SOURCE:.c=.o))
 
@@ -87,5 +87,4 @@ uninstall:
 	rm $(DESTDIR)$(PREFIX)/lib/pkgconfig/libnsgif.pc
 
 clean:
-	-rm $(OBJS) $(LIBDIR)/libnsgif.a $(LIBDIR)/libnsgif.pc $(BINDIR)/decode_gif$(EXEEXT)
-	-rm -rf doc
+	-rm -rf $(OBJS) $(LIBDIR) $(BINDIR) doc
