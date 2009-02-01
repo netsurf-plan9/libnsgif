@@ -87,4 +87,4 @@ uninstall:
 	rm $(DESTDIR)$(PREFIX)/lib/pkgconfig/libnsgif.pc
 
 clean:
-	-rm -rf $(OBJS) $(LIBDIR) $(BINDIR) doc
+	-rm -rf $(OBJDIR) $(LIBDIR) $(BINDIR) doc
