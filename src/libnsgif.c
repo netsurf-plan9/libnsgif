@@ -323,7 +323,7 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 				colour[0] = gif_data[0];
 				colour[1] = gif_data[1];
 				colour[2] = gif_data[2];
-				gif->global_colour_table[index] = *((int *) colour);
+				gif->global_colour_table[index] = *((int *) (void *) colour);
 				gif_data += 3;
 			}
 			gif->buffer_position = (gif_data - gif->gif_data);
@@ -848,7 +848,7 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 				colour[0] = gif_data[0];
 				colour[1] = gif_data[1];
 				colour[2] = gif_data[2];
-				colour_table[index] = *((int *) colour);
+				colour_table[index] = *((int *) (void *) colour);
 				gif_data += 3;
 			}
 		} else {
@@ -872,7 +872,7 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 	/*	Get the frame data
 	*/
 	assert(gif->bitmap_callbacks.bitmap_get_buffer);
-	frame_data = (unsigned int *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
+	frame_data = (void *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
 	if (!frame_data)
 		return GIF_INSUFFICIENT_MEMORY;
 
@@ -921,7 +921,7 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 					/*	Get this frame's data
 					*/
 					assert(gif->bitmap_callbacks.bitmap_get_buffer);
-					frame_data = (unsigned int *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
+					frame_data = (void *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
 					if (!frame_data)
 						return GIF_INSUFFICIENT_MEMORY;
 				}
