@@ -8,11 +8,20 @@ COMPONENT_TYPE ?= lib-static
 include build/makefiles/Makefile.tools
 
 # Toolchain flags
-WARNFLAGS := -Wall -Wextra -Wundef -Wpointer-arith -Wcast-align \
+WARNFLAGS := -Wall -Wundef -Wpointer-arith -Wcast-align \
 	-Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes \
 	-Wmissing-declarations -Wnested-externs -Werror -pedantic
-CFLAGS := $(CFLAGS) -std=c99 -D_BSD_SOURCE -I$(CURDIR)/include/ \
+ifneq ($(GCCVER),2)
+  WARNFLAGS := $(WARNFLAGS) -Wextra
+endif
+CFLAGS := $(CFLAGS) -D_BSD_SOURCE -I$(CURDIR)/include/ \
 	-I$(CURDIR)/src $(WARNFLAGS) 
+ifneq ($(GCCVER),2)
+  CFLAGS := $(CFLAGS) -std=c99
+else
+  # __inline__ is a GCCism
+  CFLAGS := $(CFLAGS) -Dinline="__inline__"
+endif
 
 include build/makefiles/Makefile.top
 
