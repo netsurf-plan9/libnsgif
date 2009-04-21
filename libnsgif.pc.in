@@ -6,5 +6,5 @@ includedir=${prefix}/include
 Name: libnsgif
 Description: Provides gif loading and conversion
 Version: VERSION
-Libs: -L${libdir} -lnsgifMAJOR
-Cflags: -I${includedir}/libnsgifMAJOR
+Libs: -L${libdir} -lnsgif
+Cflags: -I${includedir}

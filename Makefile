@@ -26,7 +26,7 @@ endif
 include build/makefiles/Makefile.top
 
 # Extra installation rules
-I := /include/libnsgif$(major-version)
+I := /include
 INSTALL_ITEMS := $(INSTALL_ITEMS) $(I):include/libnsgif.h
 INSTALL_ITEMS := $(INSTALL_ITEMS) /lib/pkgconfig:lib$(COMPONENT).pc.in
 INSTALL_ITEMS := $(INSTALL_ITEMS) /lib:$(OUTPUT)
