@@ -319,11 +319,14 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 				return GIF_INSUFFICIENT_DATA;
 			}
 			for (index = 0; index < gif->colour_table_size; index++) {
-				char colour[] = {0, 0, 0, (char)0xff};
-				colour[0] = gif_data[0];
-				colour[1] = gif_data[1];
-				colour[2] = gif_data[2];
-				gif->global_colour_table[index] = *((int *) (void *) colour);
+				/* Gif colour map contents are r,g,b.
+				 * Our table entries are ABGR */
+
+				gif->global_colour_table[index] = (0xff << 24) |
+						(gif_data[2] << 16) | 
+						(gif_data[1] << 8) | 
+						gif_data[0];
+
 				gif_data += 3;
 			}
 			gif->buffer_position = (gif_data - gif->gif_data);
@@ -844,11 +847,13 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 		colour_table = gif->local_colour_table;
 		if (!clear_image) {
 			for (index = 0; index < colour_table_size; index++) {
-				char colour[] = {0, 0, 0, (char)0xff};
-				colour[0] = gif_data[0];
-				colour[1] = gif_data[1];
-				colour[2] = gif_data[2];
-				colour_table[index] = *((int *) (void *) colour);
+				/* Gif colour map contents are r,g,b.
+				 * Our table entries are ABGR */
+
+				colour_table[index] = (0xff << 24) |
+						(gif_data[2] << 16) | 
+						(gif_data[1] << 8) | 
+						gif_data[0];
 				gif_data += 3;
 			}
 		} else {
