@@ -320,12 +320,19 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 			}
 			for (index = 0; index < gif->colour_table_size; index++) {
 				/* Gif colour map contents are r,g,b.
-				 * Our table entries are ABGR */
+				 *
+				 * We want to pack them bytewise into the 
+				 * colour table, such that the red component
+				 * is in byte 0 and the alpha component is in
+				 * byte 3.
+				 */
+				unsigned char *entry = (unsigned char *) &gif->
+						global_colour_table[index];
 
-				gif->global_colour_table[index] = (0xff << 24) |
-						(gif_data[2] << 16) | 
-						(gif_data[1] << 8) | 
-						gif_data[0];
+				entry[0] = gif_data[0];	/* r */
+				entry[1] = gif_data[1];	/* g */
+				entry[2] = gif_data[2];	/* b */
+				entry[3] = 0xff;	/* a */
 
 				gif_data += 3;
 			}
@@ -333,8 +340,13 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 		} else {
 			/*	Create a default colour table with the first two colours as black and white
 			*/
-			gif->global_colour_table[0] = 0xff000000;
-			gif->global_colour_table[1] = 0xffffffff;
+			unsigned int *entry = gif->global_colour_table;
+
+			entry[0] = 0x00000000;
+			/* Force Alpha channel to opaque */
+			((unsigned char *) entry)[3] = 0xff;
+
+			entry[1] = 0xffffffff;
 		}
 	}
 
@@ -848,12 +860,20 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 		if (!clear_image) {
 			for (index = 0; index < colour_table_size; index++) {
 				/* Gif colour map contents are r,g,b.
-				 * Our table entries are ABGR */
+				 *
+				 * We want to pack them bytewise into the 
+				 * colour table, such that the red component
+				 * is in byte 0 and the alpha component is in
+				 * byte 3.
+				 */
+				unsigned char *entry = 
+					(unsigned char *) &colour_table[index];
 
-				colour_table[index] = (0xff << 24) |
-						(gif_data[2] << 16) | 
-						(gif_data[1] << 8) | 
-						gif_data[0];
+				entry[0] = gif_data[0];	/* r */
+				entry[1] = gif_data[1];	/* g */
+				entry[2] = gif_data[2];	/* b */
+				entry[3] = 0xff;	/* a */
+
 				gif_data += 3;
 			}
 		} else {
