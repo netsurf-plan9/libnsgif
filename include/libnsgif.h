@@ -15,6 +15,7 @@
 #define _LIBNSGIF_H_
 
 #include <stdbool.h>
+#include <inttypes.h>
 
 /*	Error return values
 */
