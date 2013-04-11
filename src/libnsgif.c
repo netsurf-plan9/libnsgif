@@ -265,8 +265,8 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data) 
 			always get the maximum size in case a GIF is lying to us. It's far better
 			to give the wrong colours than to trample over some memory somewhere.
 		*/
-		gif->global_colour_table = (unsigned int *)calloc(GIF_MAX_COLOURS, sizeof(int));
-		gif->local_colour_table = (unsigned int *)calloc(GIF_MAX_COLOURS, sizeof(int));
+		gif->global_colour_table = calloc(GIF_MAX_COLOURS, sizeof(unsigned int));
+		gif->local_colour_table = calloc(GIF_MAX_COLOURS, sizeof(unsigned int));
 		if ((gif->global_colour_table == NULL) || (gif->local_colour_table == NULL)) {
 			gif_finalise(gif);
 			return GIF_INSUFFICIENT_MEMORY;
