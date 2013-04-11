@@ -934,22 +934,24 @@ gif_result gif_decode_frame(gif_animation *gif, unsigned int frame) {
 		 *	image, find the last image set to "do not dispose" and get that frame data
 		*/
 		} else if ((frame != 0) && (gif->frames[frame - 1].disposal_method == GIF_FRAME_RESTORE)) {
-			while ((last_undisposed_frame != -1) && (gif->frames[--last_undisposed_frame].disposal_method == GIF_FRAME_RESTORE));
-				/*	If we don't find one, clear the frame data
+			while ((last_undisposed_frame != -1) && (gif->frames[--last_undisposed_frame].disposal_method == GIF_FRAME_RESTORE))
+				;
+
+			/*	If we don't find one, clear the frame data
+			 */
+			if (last_undisposed_frame == -1) {
+				/* see notes above on transparency vs. background color */
+				memset((char*)frame_data, GIF_TRANSPARENT_COLOUR, gif->width * gif->height * sizeof(int));
+			} else {
+				if ((return_value = gif_decode_frame(gif, last_undisposed_frame)) != GIF_OK)
+					goto gif_decode_frame_exit;
+				/*	Get this frame's data
 				*/
-				if (last_undisposed_frame == -1) {
-					/* see notes above on transparency vs. background color */
-					memset((char*)frame_data, GIF_TRANSPARENT_COLOUR, gif->width * gif->height * sizeof(int));
-				} else {
-					if ((return_value = gif_decode_frame(gif, last_undisposed_frame)) != GIF_OK)
-						goto gif_decode_frame_exit;
-					/*	Get this frame's data
-					*/
-					assert(gif->bitmap_callbacks.bitmap_get_buffer);
-					frame_data = (void *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
-					if (!frame_data)
-						return GIF_INSUFFICIENT_MEMORY;
-				}
+				assert(gif->bitmap_callbacks.bitmap_get_buffer);
+				frame_data = (void *)gif->bitmap_callbacks.bitmap_get_buffer(gif->frame_image);
+				if (!frame_data)
+					return GIF_INSUFFICIENT_MEMORY;
+			}
 		}
 		gif->decoded_frame = frame;
 
