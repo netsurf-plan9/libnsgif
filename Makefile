@@ -31,5 +31,5 @@ include $(NSBUILD)/Makefile.top
 # Extra installation rules
 I := /include
 INSTALL_ITEMS := $(INSTALL_ITEMS) $(I):include/libnsgif.h
-INSTALL_ITEMS := $(INSTALL_ITEMS) /lib/pkgconfig:lib$(COMPONENT).pc.in
-INSTALL_ITEMS := $(INSTALL_ITEMS) /lib:$(OUTPUT)
+INSTALL_ITEMS := $(INSTALL_ITEMS) /$(LIBDIR)/pkgconfig:lib$(COMPONENT).pc.in
+INSTALL_ITEMS := $(INSTALL_ITEMS) /$(LIBDIR):$(OUTPUT)
