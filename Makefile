@@ -14,7 +14,7 @@ WARNFLAGS := -Wall -W -Wundef -Wpointer-arith -Wcast-align \
 	-Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes \
 	-Wmissing-declarations -Wnested-externs -pedantic
 # BeOS/Haiku standard library headers create warnings
-ifneq ($(TARGET),beos)
+ifneq ($(BUILD),i586-pc-haiku)
   WARNFLAGS := $(WARNFLAGS) -Werror
 endif
 CFLAGS := -D_BSD_SOURCE -I$(CURDIR)/include/ \
