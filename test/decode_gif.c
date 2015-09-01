@@ -14,7 +14,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "../libnsgif.h"
+
+#include "../include/libnsgif.h"
 
 unsigned char *load_file(const char *path, size_t *data_size);
 void warning(const char *context, int code);
@@ -178,12 +179,14 @@ void *bitmap_create(int width, int height)
 void bitmap_set_opaque(void *bitmap, bool opaque)
 {
 	(void) opaque;  /* unused */
+	(void) bitmap;  /* unused */
 	assert(bitmap);
 }
 
 
 bool bitmap_test_opaque(void *bitmap)
 {
+	(void) bitmap;  /* unused */
 	assert(bitmap);
 	return false;
 }
@@ -205,6 +208,7 @@ void bitmap_destroy(void *bitmap)
 
 void bitmap_modified(void *bitmap)
 {
+	(void) bitmap;  /* unused */
 	assert(bitmap);
 	return;
 }
