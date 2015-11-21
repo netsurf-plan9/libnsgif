@@ -513,6 +513,7 @@ static gif_result gif_initialise_frame(gif_animation *gif) {
 
 	/*	Do some simple boundary checking
 	*/
+	if (gif_bytes < 10) return GIF_INSUFFICIENT_FRAME_DATA;
 	offset_x = gif_data[1] | (gif_data[2] << 8);
 	offset_y = gif_data[3] | (gif_data[4] << 8);
 	width = gif_data[5] | (gif_data[6] << 8);
@@ -574,20 +575,22 @@ static gif_result gif_initialise_frame(gif_animation *gif) {
 
 	/*	Ensure we have a correct code size
 	*/
+	if (gif_bytes < 1)
+		return GIF_INSUFFICIENT_FRAME_DATA;
 	if (gif_data[0] > GIF_MAX_LZW)
 		return GIF_DATA_ERROR;
 
 	/*	Move our pointer to the actual image data
 	*/
 	gif_data++;
-	if (--gif_bytes < 0)
-		return GIF_INSUFFICIENT_FRAME_DATA;
+	--gif_bytes;
 
 	/*	Repeatedly skip blocks until we get a zero block or run out of data
 	 *	These blocks of image data are processed later by gif_decode_frame()
 	*/
 	block_size = 0;
 	while (block_size != 1) {
+		if (gif_bytes < 1) return GIF_INSUFFICIENT_FRAME_DATA;
 		block_size = gif_data[0] + 1;
 		/*	Check if the frame data runs off the end of the file
 		*/
@@ -644,9 +647,10 @@ static gif_result gif_initialise_frame_extensions(gif_animation *gif, const int 
 	
 	/*	Initialise the extensions
 	*/
-	while (gif_data[0] == GIF_EXTENSION_INTRODUCER) {
+	while (gif_data < gif_end && gif_data[0] == GIF_EXTENSION_INTRODUCER) {
 		++gif_data;
-		gif_bytes = (gif_end - gif_data);
+		if ((gif_bytes = (gif_end - gif_data)) < 1)
+			return GIF_INSUFFICIENT_FRAME_DATA;
 
 		/*	Switch on extension label
 		*/
@@ -713,6 +717,7 @@ static gif_result gif_initialise_frame_extensions(gif_animation *gif, const int 
 			 *	Skip the extension size itself
 			*/
 			default:
+				if (gif_bytes < 2) return GIF_INSUFFICIENT_FRAME_DATA;
 				gif_data += (2 + gif_data[1]);
 		}
 
@@ -721,7 +726,7 @@ static gif_result gif_initialise_frame_extensions(gif_animation *gif, const int 
 		*/
 		gif_bytes = (gif_end - gif_data);
 		block_size = 0;
-		while (gif_data[0] != GIF_BLOCK_TERMINATOR) {
+		while (gif_data < gif_end && gif_data[0] != GIF_BLOCK_TERMINATOR) {
 			block_size = gif_data[0] + 1;
 			if ((gif_bytes -= block_size) < 0)
 				return GIF_INSUFFICIENT_FRAME_DATA;
@@ -1070,8 +1075,10 @@ static gif_result gif_skip_frame_extensions(gif_animation *gif) {
 
 	/*	Skip the extensions
 	*/
-	while (gif_data[0] == GIF_EXTENSION_INTRODUCER) {
+	while (gif_data < gif_end && gif_data[0] == GIF_EXTENSION_INTRODUCER) {
 		++gif_data;
+		if (gif_data >= gif_end)
+			return GIF_INSUFFICIENT_FRAME_DATA;
 
 		/*	Switch on extension label
 		*/
@@ -1088,6 +1095,8 @@ static gif_result gif_skip_frame_extensions(gif_animation *gif) {
 			 *	Skip the extension size itself
 			*/
 			default:
+				if (gif_data + 1 >= gif_end)
+					return GIF_INSUFFICIENT_FRAME_DATA;
 				gif_data += (2 + gif_data[1]);
 		}
 
@@ -1096,7 +1105,7 @@ static gif_result gif_skip_frame_extensions(gif_animation *gif) {
 		*/
 		gif_bytes = (gif_end - gif_data);
 		block_size = 0;
-		while (gif_data[0] != GIF_BLOCK_TERMINATOR) {
+		while (gif_data < gif_end && gif_data[0] != GIF_BLOCK_TERMINATOR) {
 			block_size = gif_data[0] + 1;
 			if ((gif_bytes -= block_size) < 0)
 				return GIF_INSUFFICIENT_FRAME_DATA;
@@ -1188,7 +1197,8 @@ static bool gif_next_LZW(gif_animation *gif) {
 			return false;
 		}
 		block_size = 0;
-		while (block_size != 1) {
+		while (block_size != 1 &&
+				gif->buffer_position < gif->buffer_size) {
 			block_size = gif->gif_data[gif->buffer_position] + 1;
 			gif->buffer_position += block_size;
 		}
@@ -1249,12 +1259,16 @@ static int gif_next_code(gif_animation *gif, int code_size) {
 
 		/* get the next block */
 		direct = gif->gif_data + gif->buffer_position;
+		if (gif->buffer_position >= gif->buffer_size)
+			return GIF_INSUFFICIENT_FRAME_DATA;
 		zero_data_block = ((count = direct[0]) == 0);
 		if ((gif->buffer_position + count) >= gif->buffer_size)
 			return GIF_INSUFFICIENT_FRAME_DATA;
 		if (count == 0)
 			get_done = true;
 		else {
+			if (gif->buffer_position + 3 >= gif->buffer_size)
+				return GIF_INSUFFICIENT_FRAME_DATA;
 			direct -= 1;
 			buf[2] = direct[2];
 			buf[3] = direct[3];
