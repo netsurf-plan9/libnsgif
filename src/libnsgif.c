@@ -1221,7 +1221,8 @@ static bool gif_next_LZW(gif_animation *gif) {
 	 *
 	 * Note: our stack is always big enough to hold a complete decompressed chunk. */
 	while (code >= clear_code) {
-		if (stack_pointer >= stack + ((1 << GIF_MAX_LZW) * 2)) {
+		if (stack_pointer >= stack + ((1 << GIF_MAX_LZW) * 2) ||
+				code >= (1 << GIF_MAX_LZW)) {
 			gif->current_error = GIF_FRAME_DATA_ERROR;
 			return false;
 		}
@@ -1232,7 +1233,8 @@ static bool gif_next_LZW(gif_animation *gif) {
 			break;
 		}
 
-		if (stack_pointer >= stack + ((1 << GIF_MAX_LZW) * 2)) {
+		if (stack_pointer >= stack + ((1 << GIF_MAX_LZW) * 2) ||
+				new_code >= (1 << GIF_MAX_LZW)) {
 			gif->current_error = GIF_FRAME_DATA_ERROR;
 			return false;
 		}
