@@ -17,199 +17,216 @@
 
 #include "../include/libnsgif.h"
 
-unsigned char *load_file(const char *path, size_t *data_size);
-void warning(const char *context, int code);
-void *bitmap_create(int width, int height);
-void bitmap_set_opaque(void *bitmap, bool opaque);
-bool bitmap_test_opaque(void *bitmap);
-unsigned char *bitmap_get_buffer(void *bitmap);
-void bitmap_destroy(void *bitmap);
-void bitmap_modified(void *bitmap);
+#define BYTES_PER_PIXEL 4
+#define MAX_IMAGE_BYTES (48 * 1024 * 1024)
 
+
+static void *bitmap_create(int width, int height)
+{
+        /* ensure a stupidly large bitmap is not created */
+        if (((long long)width * (long long)height) > (MAX_IMAGE_BYTES/BYTES_PER_PIXEL)) {
+                return NULL;
+        }
+        return calloc(width * height, BYTES_PER_PIXEL);
+}
+
+
+static void bitmap_set_opaque(void *bitmap, bool opaque)
+{
+        (void) opaque;  /* unused */
+        (void) bitmap;  /* unused */
+        assert(bitmap);
+}
+
+
+static bool bitmap_test_opaque(void *bitmap)
+{
+        (void) bitmap;  /* unused */
+        assert(bitmap);
+        return false;
+}
+
+
+static unsigned char *bitmap_get_buffer(void *bitmap)
+{
+        assert(bitmap);
+        return bitmap;
+}
+
+
+static void bitmap_destroy(void *bitmap)
+{
+        assert(bitmap);
+        free(bitmap);
+}
+
+
+static void bitmap_modified(void *bitmap)
+{
+        (void) bitmap;  /* unused */
+        assert(bitmap);
+        return;
+}
+
+static unsigned char *load_file(const char *path, size_t *data_size)
+{
+        FILE *fd;
+        struct stat sb;
+        unsigned char *buffer;
+        size_t size;
+        size_t n;
+
+        fd = fopen(path, "rb");
+        if (!fd) {
+                perror(path);
+                exit(EXIT_FAILURE);
+        }
+
+        if (stat(path, &sb)) {
+                perror(path);
+                exit(EXIT_FAILURE);
+        }
+        size = sb.st_size;
+
+        buffer = malloc(size);
+        if (!buffer) {
+                fprintf(stderr, "Unable to allocate %lld bytes\n",
+                        (long long) size);
+                exit(EXIT_FAILURE);
+        }
+
+        n = fread(buffer, 1, size, fd);
+        if (n != size) {
+                perror(path);
+                exit(EXIT_FAILURE);
+        }
+
+        fclose(fd);
+
+        *data_size = size;
+        return buffer;
+}
+
+
+static void warning(const char *context, gif_result code)
+{
+        fprintf(stderr, "%s failed: ", context);
+        switch (code)
+        {
+        case GIF_INSUFFICIENT_FRAME_DATA:
+                fprintf(stderr, "GIF_INSUFFICIENT_FRAME_DATA");
+                break;
+        case GIF_FRAME_DATA_ERROR:
+                fprintf(stderr, "GIF_FRAME_DATA_ERROR");
+                break;
+        case GIF_INSUFFICIENT_DATA:
+                fprintf(stderr, "GIF_INSUFFICIENT_DATA");
+                break;
+        case GIF_DATA_ERROR:
+                fprintf(stderr, "GIF_DATA_ERROR");
+                break;
+        case GIF_INSUFFICIENT_MEMORY:
+                fprintf(stderr, "GIF_INSUFFICIENT_MEMORY");
+                break;
+        default:
+                fprintf(stderr, "unknown code %i", code);
+                break;
+        }
+        fprintf(stderr, "\n");
+}
+
+static void write_ppm(FILE* fh, const char *name, gif_animation *gif)
+{
+        unsigned int i;
+        gif_result code;
+
+        fprintf(fh, "P3\n");
+        fprintf(fh, "# %s\n", name);
+        fprintf(fh, "# width                %u \n", gif->width);
+        fprintf(fh, "# height               %u \n", gif->height);
+        fprintf(fh, "# frame_count          %u \n", gif->frame_count);
+        fprintf(fh, "# frame_count_partial  %u \n", gif->frame_count_partial);
+        fprintf(fh, "# loop_count           %u \n", gif->loop_count);
+        fprintf(fh, "%u %u 256\n", gif->width, gif->height * gif->frame_count);
+
+        /* decode the frames */
+        for (i = 0; i != gif->frame_count; i++) {
+                unsigned int row, col;
+                unsigned char *image;
+
+                code = gif_decode_frame(gif, i);
+                if (code != GIF_OK)
+                        warning("gif_decode_frame", code);
+
+                printf("# frame %u:\n", i);
+                image = (unsigned char *) gif->frame_image;
+                for (row = 0; row != gif->height; row++) {
+                        for (col = 0; col != gif->width; col++) {
+                                size_t z = (row * gif->width + col) * 4;
+                                fprintf(fh, "%u %u %u ",
+                                        (unsigned char) image[z],
+                                        (unsigned char) image[z + 1],
+                                        (unsigned char) image[z + 2]);
+                        }
+                        fprintf(fh, "\n");
+                }
+        }
+
+}
 
 int main(int argc, char *argv[])
 {
-	gif_bitmap_callback_vt bitmap_callbacks = {
-		bitmap_create,
-		bitmap_destroy,
-		bitmap_get_buffer,
-		bitmap_set_opaque,
-		bitmap_test_opaque,
-		bitmap_modified
-	};
-	gif_animation gif;
-	size_t size;
-	gif_result code;
-	unsigned int i;
+        gif_bitmap_callback_vt bitmap_callbacks = {
+                bitmap_create,
+                bitmap_destroy,
+                bitmap_get_buffer,
+                bitmap_set_opaque,
+                bitmap_test_opaque,
+                bitmap_modified
+        };
+        gif_animation gif;
+        size_t size;
+        gif_result code;
+        unsigned char *data;
+        FILE *outf = stdout;
 
-	if (argc != 2) {
-		fprintf(stderr, "Usage: %s image.gif\n", argv[0]);
-		return 1;
-	}
+        if (argc < 2) {
+                fprintf(stderr, "Usage: %s image.gif [out]\n", argv[0]);
+                return 1;
+        }
 
-	/* create our gif animation */
-	gif_create(&gif, &bitmap_callbacks);
+        if (argc > 2) {
+                outf = fopen(argv[2], "w+");
+                if (outf == NULL) {
+                        fprintf(stderr, "Unable to open %s for writing\n", argv[2]);
+                        return 2;
+                }
+        }
 
-	/* load file into memory */
-	unsigned char *data = load_file(argv[1], &size);
+        /* create our gif animation */
+        gif_create(&gif, &bitmap_callbacks);
 
-	/* begin decoding */
-	do {
-		code = gif_initialise(&gif, size, data);
-		if (code != GIF_OK && code != GIF_WORKING) {
-			warning("gif_initialise", code);
-			exit(1);
-		}
-	} while (code != GIF_OK);
+        /* load file into memory */
+        data = load_file(argv[1], &size);
 
-	printf("P3\n");
-	printf("# %s\n", argv[1]);
-	printf("# width                %u \n", gif.width);
-	printf("# height               %u \n", gif.height);
-	printf("# frame_count          %u \n", gif.frame_count);
-	printf("# frame_count_partial  %u \n", gif.frame_count_partial);
-	printf("# loop_count           %u \n", gif.loop_count);
-	printf("%u %u 256\n", gif.width, gif.height * gif.frame_count);
+        /* begin decoding */
+        do {
+                code = gif_initialise(&gif, size, data);
+                if (code != GIF_OK && code != GIF_WORKING) {
+                        warning("gif_initialise", code);
+                        return 1;
+                }
+        } while (code != GIF_OK);
 
-	/* decode the frames */
-	for (i = 0; i != gif.frame_count; i++) {
-		unsigned int row, col;
-		unsigned char *image;
+        write_ppm(outf, argv[1], &gif);
 
-		code = gif_decode_frame(&gif, i);
-		if (code != GIF_OK)
-			warning("gif_decode_frame", code);
+        if (argc > 2) {
+                fclose(outf);
+        }
 
-		printf("# frame %u:\n", i);
-		image = (unsigned char *) gif.frame_image;
-		for (row = 0; row != gif.height; row++) {
-			for (col = 0; col != gif.width; col++) {
-				size_t z = (row * gif.width + col) * 4;
-				printf("%u %u %u ",
-					(unsigned char) image[z],
-					(unsigned char) image[z + 1],
-					(unsigned char) image[z + 2]);
-			}
-			printf("\n");
-		}
-	}
+        /* clean up */
+        gif_finalise(&gif);
+        free(data);
 
-	/* clean up */
-	gif_finalise(&gif);
-	free(data);
-
-	return 0;
+        return 0;
 }
-
-
-unsigned char *load_file(const char *path, size_t *data_size)
-{
-	FILE *fd;
-	struct stat sb;
-	unsigned char *buffer;
-	size_t size;
-	size_t n;
-
-	fd = fopen(path, "rb");
-	if (!fd) {
-		perror(path);
-		exit(EXIT_FAILURE);
-	}
-
-	if (stat(path, &sb)) {
-		perror(path);
-		exit(EXIT_FAILURE);
-	}
-	size = sb.st_size;
-
-	buffer = malloc(size);
-	if (!buffer) {
-		fprintf(stderr, "Unable to allocate %lld bytes\n",
-				(long long) size);
-		exit(EXIT_FAILURE);
-	}
-
-	n = fread(buffer, 1, size, fd);
-	if (n != size) {
-		perror(path);
-		exit(EXIT_FAILURE);
-	}
-
-	fclose(fd);
-
-	*data_size = size;
-	return buffer;
-}
-
-
-void warning(const char *context, gif_result code)
-{
-	fprintf(stderr, "%s failed: ", context);
-	switch (code)
-	{
-	case GIF_INSUFFICIENT_FRAME_DATA:
-		fprintf(stderr, "GIF_INSUFFICIENT_FRAME_DATA");
-		break;
-	case GIF_FRAME_DATA_ERROR:
-		fprintf(stderr, "GIF_FRAME_DATA_ERROR");
-		break;
-	case GIF_INSUFFICIENT_DATA:
-		fprintf(stderr, "GIF_INSUFFICIENT_DATA");
-		break;
-	case GIF_DATA_ERROR:
-		fprintf(stderr, "GIF_DATA_ERROR");
-		break;
-	case GIF_INSUFFICIENT_MEMORY:
-		fprintf(stderr, "GIF_INSUFFICIENT_MEMORY");
-		break;
-	default:
-		fprintf(stderr, "unknown code %i", code);
-		break;
-	}
-	fprintf(stderr, "\n");
-}
-
-
-void *bitmap_create(int width, int height)
-{
-	return calloc(width * height, 4);
-}
-
-
-void bitmap_set_opaque(void *bitmap, bool opaque)
-{
-	(void) opaque;  /* unused */
-	(void) bitmap;  /* unused */
-	assert(bitmap);
-}
-
-
-bool bitmap_test_opaque(void *bitmap)
-{
-	(void) bitmap;  /* unused */
-	assert(bitmap);
-	return false;
-}
-
-
-unsigned char *bitmap_get_buffer(void *bitmap)
-{
-	assert(bitmap);
-	return bitmap;
-}
-
-
-void bitmap_destroy(void *bitmap)
-{
-	assert(bitmap);
-	free(bitmap);
-}
-
-
-void bitmap_modified(void *bitmap)
-{
-	(void) bitmap;  /* unused */
-	assert(bitmap);
-	return;
-}
-
