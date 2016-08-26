@@ -158,7 +158,7 @@ static void write_ppm(FILE* fh, const char *name, gif_animation *gif)
                 if (code != GIF_OK)
                         warning("gif_decode_frame", code);
 
-                printf("# frame %u:\n", i);
+                fprintf(fh, "# frame %u:\n", i);
                 image = (unsigned char *) gif->frame_image;
                 for (row = 0; row != gif->height; row++) {
                         for (col = 0; col != gif->width; col++) {
