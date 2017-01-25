@@ -793,7 +793,6 @@ gif_internal_decode_frame(gif_animation *gif,
         unsigned int save_buffer_position;
         unsigned int return_value = 0;
         unsigned int x, y, decode_y, burst_bytes;
-        int last_undisposed_frame = (frame - 1);
         register unsigned char colour;
 
         /* Ensure this frame is supposed to be decoded */
@@ -980,20 +979,25 @@ gif_internal_decode_frame(gif_animation *gif,
                         if (return_value != GIF_OK) {
                                 goto gif_decode_frame_exit;
                         }
+
+                } else if ((frame != 0) &&
+                           (gif->frames[frame - 1].disposal_method == GIF_FRAME_RESTORE)) {
                         /*
                          * If the previous frame's disposal method requires we
                          * restore the previous image, find the last image set
                          * to "do not dispose" and get that frame data
                          */
-                } else if ((frame != 0) &&
-                           (gif->frames[frame - 1].disposal_method == GIF_FRAME_RESTORE)) {
-                        while ((last_undisposed_frame != -1) &&
-                               (gif->frames[--last_undisposed_frame].disposal_method == GIF_FRAME_RESTORE));
+                        int last_undisposed_frame = frame - 2;
+                        while ((last_undisposed_frame >= 0) &&
+                               (gif->frames[last_undisposed_frame].disposal_method == GIF_FRAME_RESTORE)) {
+                                last_undisposed_frame--;
+                        }
 
                         /* If we don't find one, clear the frame data */
                         if (last_undisposed_frame == -1) {
                                 /* see notes above on transparency
-                                 * vs. background color */
+                                 * vs. background color
+                                 */
                                 memset((char*)frame_data,
                                        GIF_TRANSPARENT_COLOUR,
                                        gif->width * gif->height * sizeof(int));
