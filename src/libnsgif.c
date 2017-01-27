@@ -69,7 +69,6 @@
 struct lzw_s {
     unsigned char buf[4];
     unsigned char *direct;
-    int maskTbl[16];
     int table[2][(1 << GIF_MAX_LZW)];
     unsigned char stack[(1 << GIF_MAX_LZW) * 2];
     unsigned char *stack_pointer;
@@ -95,20 +94,28 @@ struct lzw_s {
  * each image which would use an extra 10Kb or so per GIF.
  */
 static struct lzw_s lzw_params = {
-    .maskTbl = {
-        0x0000, 0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f,
-        0x00ff, 0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff
-    },
     .zero_data_block = false,
 };
 
 static struct lzw_s *lzw = &lzw_params;
 
-
+/**
+ * get the next LZW code from the GIF
+ *
+ * reads codes from the input data stream coping with GIF data sub blocking
+ *
+ * \param gif The GIF context
+ * \param code_size The number of bitsin the current LZW code
+ * \return The next code to process or error return code
+ */
 static int gif_next_code(gif_animation *gif, int code_size)
 {
         int i, j, end, count, ret;
         unsigned char *b;
+        static const int maskTbl[16] = {
+                0x0000, 0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f,
+                0x00ff, 0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff
+        };
 
         end = lzw->curbit + code_size;
         if (end >= lzw->lastbit) {
@@ -123,10 +130,13 @@ static int gif_next_code(gif_animation *gif, int code_size)
                 if (gif->buffer_position >= gif->buffer_size) {
                         return GIF_INSUFFICIENT_FRAME_DATA;
                 }
-                lzw->zero_data_block = ((count = lzw->direct[0]) == 0);
+
+                count = lzw->direct[0];
+                lzw->zero_data_block = (count == 0);
                 if ((gif->buffer_position + count) >= gif->buffer_size) {
                         return GIF_INSUFFICIENT_FRAME_DATA;
                 }
+
                 if (count == 0) {
                         lzw->get_done = true;
                 } else {
@@ -161,14 +171,18 @@ static int gif_next_code(gif_animation *gif, int code_size)
                         ret |= (b[i + 2] << 16);
                 }
         }
-        ret = (ret >> (lzw->curbit % 8)) & lzw->maskTbl[code_size];
+        ret = (ret >> (lzw->curbit % 8)) & maskTbl[code_size];
         lzw->curbit += code_size;
+
         return ret;
 }
 
 
 /**
  * Clear LZW code dictionary
+ *
+ * \param gif The GIF context.
+ * \return GIF_OK or error code.
  */
 static gif_result gif_clear_codes_LZW(gif_animation *gif)
 {
@@ -207,6 +221,12 @@ static gif_result gif_clear_codes_LZW(gif_animation *gif)
 }
 
 
+/**
+ * fill the LZW stack with decompressed data
+ *
+ * \param gif The GIF context.
+ * \return true on sucessful decode of the next LZW code else false.
+ */
 static bool gif_next_LZW(gif_animation *gif)
 {
         int code, incode;
@@ -256,7 +276,7 @@ static bool gif_next_LZW(gif_animation *gif)
         /* The following loop is the most important in the GIF decoding cycle
          * as every single pixel passes through it.
          *
-         * Note: our lzw->stack is always big enough to hold a complete decompressed
+         * Note: our stack is always big enough to hold a complete decompressed
          * chunk.
          */
         while (code >= lzw->clear_code) {
@@ -291,7 +311,8 @@ static bool gif_next_LZW(gif_animation *gif)
         }
         *lzw->stack_pointer++ = lzw->firstcode = lzw->table[1][code];
 
-        if ((code = lzw->max_code) < (1 << GIF_MAX_LZW)) {
+        code = lzw->max_code;
+        if (code < (1 << GIF_MAX_LZW)) {
                 lzw->table[0][code] = lzw->oldcode;
                 lzw->table[1][code] = lzw->firstcode;
                 ++lzw->max_code;
