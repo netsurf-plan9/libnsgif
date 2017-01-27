@@ -177,6 +177,7 @@ static int gif_next_code(gif_animation *gif, int code_size)
 static gif_result gif_clear_codes_LZW(gif_animation *gif)
 {
         int i;
+        int code;
 
         if (lzw->clear_code >= (1 << GIF_MAX_LZW)) {
                 lzw->stack_pointer = lzw->stack;
@@ -197,8 +198,13 @@ static gif_result gif_clear_codes_LZW(gif_animation *gif)
 
         /* process repeated clear codes */
         do {
-                lzw->firstcode = lzw->oldcode = gif_next_code(gif, lzw->code_size);
-        } while (lzw->firstcode == lzw->clear_code);
+                code = gif_next_code(gif, lzw->code_size);
+                if (code < 0) {
+                        return code;
+                }
+        } while (code == lzw->clear_code);
+        lzw->firstcode = lzw->oldcode = code;
+
         *lzw->stack_pointer++ = lzw->firstcode;
 
         return GIF_OK;
@@ -219,6 +225,9 @@ static bool gif_next_LZW(gif_animation *gif)
 
         if (code == lzw->clear_code) {
                 gif->current_error = gif_clear_codes_LZW(gif);
+                if (gif->current_error != GIF_OK) {
+                        return false;
+                }
                 return true;
         }
 
@@ -1053,6 +1062,9 @@ gif_internal_decode_frame(gif_animation *gif,
                 lzw->get_done = false;
                 lzw->direct = lzw->buf;
                 gif->current_error = gif_clear_codes_LZW(gif);
+                if (gif->current_error != GIF_OK) {
+                        return gif->current_error;
+                }
 
                 /* Decompress the data */
                 for (y = 0; y < height; y++) {
