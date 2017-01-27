@@ -62,6 +62,8 @@
 #define GIF_BLOCK_TERMINATOR 0x00
 #define GIF_TRAILER 0x3b
 
+#define GIF_STANDARD_HEADER_SIZE 13
+
 /* Internal GIF routines */
 static gif_result gif_initialise_sprite(gif_animation *gif, unsigned int width, unsigned int height);
 static gif_result gif_initialise_frame(gif_animation *gif);
@@ -1310,7 +1312,7 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data)
         if (gif->global_colour_table[0] == GIF_PROCESS_COLOURS) {
                 /* Check for a global colour map signified by bit 7 */
                 if (gif->global_colours) {
-                        if (gif->buffer_size < (gif->colour_table_size * 3 + 12)) {
+                        if (gif->buffer_size < (gif->colour_table_size * 3 + GIF_STANDARD_HEADER_SIZE)) {
                                 return GIF_INSUFFICIENT_DATA;
                         }
                         for (index = 0; index < gif->colour_table_size; index++) {
