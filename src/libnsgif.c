@@ -222,6 +222,29 @@ static gif_result gif_clear_codes_LZW(gif_animation *gif)
 
 
 /**
+ * Initialise LZW
+ *
+ * This initialises a LZW context ready to commence decompression.
+ *
+ * \param initial_code_size The size of codes used on clearing of code dictionary
+ */
+static gif_result gif_initialise_LZW(gif_animation *gif, int initial_code_size)
+{
+        lzw->set_code_size = initial_code_size;
+        lzw->code_size = lzw->set_code_size + 1;
+        lzw->clear_code = (1 << lzw->set_code_size);
+        lzw->end_code = lzw->clear_code + 1;
+        lzw->max_code_size = lzw->clear_code << 1;
+        lzw->max_code = lzw->clear_code + 2;
+        lzw->curbit = lzw->lastbit = 0;
+        lzw->last_byte = 2;
+        lzw->get_done = false;
+        lzw->direct = lzw->buf;
+
+        return gif_clear_codes_LZW(gif);
+}
+
+/**
  * fill the LZW stack with decompressed data
  *
  * \param gif The GIF context.
@@ -1065,22 +1088,10 @@ gif_internal_decode_frame(gif_animation *gif,
                         }
                 }
                 gif->decoded_frame = frame;
-
-                /* Initialise the LZW decoding */
-                lzw->set_code_size = gif_data[0];
                 gif->buffer_position = (gif_data - gif->gif_data) + 1;
 
-                /* Set our code variables */
-                lzw->code_size = lzw->set_code_size + 1;
-                lzw->clear_code = (1 << lzw->set_code_size);
-                lzw->end_code = lzw->clear_code + 1;
-                lzw->max_code_size = lzw->clear_code << 1;
-                lzw->max_code = lzw->clear_code + 2;
-                lzw->curbit = lzw->lastbit = 0;
-                lzw->last_byte = 2;
-                lzw->get_done = false;
-                lzw->direct = lzw->buf;
-                gif->current_error = gif_clear_codes_LZW(gif);
+                /* Initialise the LZW decoding */
+                gif->current_error = gif_initialise_LZW(gif, gif_data[0]);
                 if (gif->current_error != GIF_OK) {
                         return gif->current_error;
                 }
