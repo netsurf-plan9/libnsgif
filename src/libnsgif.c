@@ -1195,7 +1195,7 @@ gif_result gif_initialise(gif_animation *gif, size_t size, unsigned char *data)
         /* Check for sufficient data to be a GIF (6-byte header + 7-byte
          * logical screen descriptor)
          */
-        if (gif->buffer_size < 13) {
+        if (gif->buffer_size < GIF_STANDARD_HEADER_SIZE) {
                 return GIF_INSUFFICIENT_DATA;
         }
 
