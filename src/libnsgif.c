@@ -68,7 +68,7 @@
 /** LZW parameters */
 struct lzw_s {
     unsigned char buf[4];
-    unsigned char *direct;
+    const unsigned char *direct;
     int table[2][(1 << GIF_MAX_LZW)];
     unsigned char stack[(1 << GIF_MAX_LZW) * 2];
     unsigned char *stack_pointer;
@@ -104,14 +104,22 @@ static struct lzw_s *lzw = &lzw_params;
  *
  * reads codes from the input data stream coping with GIF data sub blocking
  *
- * \param gif The GIF context
- * \param code_size The number of bitsin the current LZW code
+ * \param[in]      compressed_data      LZW compressed data
+ * \param[in]      compressed_data_len  Byte size of compressed_data
+ * \param[in,out]  compressed_data_pos  Current position in compressed_data
+ *                                      updated on exit.
+ * \param[in]      code_size            Number of bits in the current LZW code
  * \return The next code to process or error return code
  */
-static int gif_next_code(gif_animation *gif, int code_size)
+static int gif_next_code(
+                const uint8_t *compressed_data,
+                uint32_t compressed_data_len,
+                uint32_t *compressed_data_pos,
+                int code_size)
 {
         int i, j, end, count, ret;
-        unsigned char *b;
+        uint32_t pos = *compressed_data_pos;
+        const unsigned char *b;
         static const int maskTbl[16] = {
                 0x0000, 0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f,
                 0x00ff, 0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff
@@ -126,28 +134,28 @@ static int gif_next_code(gif_animation *gif, int code_size)
                 lzw->buf[1] = lzw->direct[lzw->last_byte - 1];
 
                 /* get the next block */
-                lzw->direct = gif->gif_data + gif->buffer_position;
-                if (gif->buffer_position >= gif->buffer_size) {
+                lzw->direct = compressed_data + pos;
+                if (pos >= compressed_data_len) {
                         return GIF_INSUFFICIENT_FRAME_DATA;
                 }
 
                 count = lzw->direct[0];
                 lzw->zero_data_block = (count == 0);
-                if ((gif->buffer_position + count) >= gif->buffer_size) {
+                if ((pos + count) >= compressed_data_len) {
                         return GIF_INSUFFICIENT_FRAME_DATA;
                 }
 
                 if (count == 0) {
                         lzw->get_done = true;
                 } else {
-                        if (gif->buffer_position + 3 >= gif->buffer_size) {
+                        if (pos + 3 >= compressed_data_len) {
                                 return GIF_INSUFFICIENT_FRAME_DATA;
                         }
                         lzw->direct -= 1;
                         lzw->buf[2] = lzw->direct[2];
                         lzw->buf[3] = lzw->direct[3];
                 }
-                gif->buffer_position += count + 1;
+                pos += count + 1;
 
                 /* update our variables */
                 lzw->last_byte = 2 + count;
@@ -174,6 +182,7 @@ static int gif_next_code(gif_animation *gif, int code_size)
         ret = (ret >> (lzw->curbit % 8)) & maskTbl[code_size];
         lzw->curbit += code_size;
 
+        *compressed_data_pos = pos;
         return ret;
 }
 
@@ -181,10 +190,16 @@ static int gif_next_code(gif_animation *gif, int code_size)
 /**
  * Clear LZW code dictionary
  *
- * \param gif The GIF context.
+ * \param[in]      compressed_data      LZW compressed data
+ * \param[in]      compressed_data_len  Byte size of compressed_data
+ * \param[in,out]  compressed_data_pos  Current position in compressed_data
+ *                                      updated on exit.
  * \return GIF_OK or error code.
  */
-static gif_result gif_clear_codes_LZW(gif_animation *gif)
+static gif_result gif_clear_codes_LZW(
+                const uint8_t *compressed_data,
+                uint32_t compressed_data_len,
+                uint32_t *compressed_data_pos)
 {
         int i;
         int code;
@@ -208,7 +223,8 @@ static gif_result gif_clear_codes_LZW(gif_animation *gif)
 
         /* process repeated clear codes */
         do {
-                code = gif_next_code(gif, lzw->code_size);
+                code = gif_next_code(compressed_data, compressed_data_len,
+                                compressed_data_pos, lzw->code_size);
                 if (code < 0) {
                         return code;
                 }
@@ -226,9 +242,17 @@ static gif_result gif_clear_codes_LZW(gif_animation *gif)
  *
  * This initialises a LZW context ready to commence decompression.
  *
- * \param initial_code_size The size of codes used on clearing of code dictionary
+ * \param[in]      compressed_data      LZW compressed data
+ * \param[in]      compressed_data_len  Byte size of compressed_data
+ * \param[in,out]  compressed_data_pos  Current position in compressed_data
+ *                                      updated on exit.
+ * \param[in]      initial_code_size    Size of codes used on clearing of code dictionary
  */
-static gif_result gif_initialise_LZW(gif_animation *gif, int initial_code_size)
+static gif_result gif_initialise_LZW(
+                const uint8_t *compressed_data,
+                uint32_t compressed_data_len,
+                uint32_t *compressed_data_pos,
+                int initial_code_size)
 {
         lzw->set_code_size = initial_code_size;
         lzw->code_size = lzw->set_code_size + 1;
@@ -241,56 +265,59 @@ static gif_result gif_initialise_LZW(gif_animation *gif, int initial_code_size)
         lzw->get_done = false;
         lzw->direct = lzw->buf;
 
-        return gif_clear_codes_LZW(gif);
+        return gif_clear_codes_LZW(compressed_data,
+                                compressed_data_len,
+                                compressed_data_pos);
 }
 
 /**
  * fill the LZW stack with decompressed data
  *
- * \param gif The GIF context.
+ * \param[in]      compressed_data      LZW compressed data
+ * \param[in]      compressed_data_len  Byte size of compressed_data
+ * \param[in,out]  compressed_data_pos  Current position in compressed_data
+ *                                      updated on exit.
  * \return true on sucessful decode of the next LZW code else false.
  */
-static bool gif_next_LZW(gif_animation *gif)
+static gif_result gif_next_LZW(
+                const uint8_t *compressed_data,
+                uint32_t compressed_data_len,
+                uint32_t *compressed_data_pos)
 {
         int code, incode;
         int block_size;
         int new_code;
 
-        code = gif_next_code(gif, lzw->code_size);
+        code = gif_next_code(compressed_data, compressed_data_len,
+                                compressed_data_pos, lzw->code_size);
         if (code < 0) {
-                gif->current_error = code;
-                return false;
+                return code;
         }
 
         if (code == lzw->clear_code) {
-                gif->current_error = gif_clear_codes_LZW(gif);
-                if (gif->current_error != GIF_OK) {
-                        return false;
-                }
-                return true;
+                return gif_clear_codes_LZW(compressed_data,
+                                compressed_data_len,
+                                compressed_data_pos);
         }
 
         if (code == lzw->end_code) {
                 /* skip to the end of our data so multi-image GIFs work */
                 if (lzw->zero_data_block) {
-                        gif->current_error = GIF_FRAME_DATA_ERROR;
-                        return false;
+                        return GIF_FRAME_DATA_ERROR;
                 }
                 block_size = 0;
                 while (block_size != 1 &&
-                       gif->buffer_position < gif->buffer_size) {
-                        block_size = gif->gif_data[gif->buffer_position] + 1;
-                        gif->buffer_position += block_size;
+                                *compressed_data_pos < compressed_data_len) {
+                        block_size = compressed_data[*compressed_data_pos] + 1;
+                        *compressed_data_pos += block_size;
                 }
-                gif->current_error = GIF_FRAME_DATA_ERROR;
-                return false;
+                return GIF_FRAME_DATA_ERROR;
         }
 
         incode = code;
         if (code >= lzw->max_code) {
                 if (lzw->stack_pointer >= lzw->stack + ((1 << GIF_MAX_LZW) * 2)) {
-                        gif->current_error = GIF_FRAME_DATA_ERROR;
-                        return false;
+                        return GIF_FRAME_DATA_ERROR;
                 }
                 *lzw->stack_pointer++ = lzw->firstcode;
                 code = lzw->oldcode;
@@ -305,8 +332,7 @@ static bool gif_next_LZW(gif_animation *gif)
         while (code >= lzw->clear_code) {
                 if (lzw->stack_pointer >= lzw->stack + ((1 << GIF_MAX_LZW) * 2) ||
                     code >= (1 << GIF_MAX_LZW)) {
-                        gif->current_error = GIF_FRAME_DATA_ERROR;
-                        return false;
+                        return GIF_FRAME_DATA_ERROR;
                 }
                 *lzw->stack_pointer++ = lzw->table[1][code];
                 new_code = lzw->table[0][code];
@@ -317,20 +343,17 @@ static bool gif_next_LZW(gif_animation *gif)
 
                 if (lzw->stack_pointer >= lzw->stack + ((1 << GIF_MAX_LZW) * 2) ||
                     new_code >= (1 << GIF_MAX_LZW)) {
-                        gif->current_error = GIF_FRAME_DATA_ERROR;
-                        return false;
+                        return GIF_FRAME_DATA_ERROR;
                 }
                 *lzw->stack_pointer++ = lzw->table[1][new_code];
                 code = lzw->table[0][new_code];
                 if (code == new_code) {
-                        gif->current_error = GIF_FRAME_DATA_ERROR;
-                        return false;
+                        return GIF_FRAME_DATA_ERROR;
                 }
         }
 
         if (lzw->stack_pointer >= lzw->stack + ((1 << GIF_MAX_LZW) * 2)) {
-                gif->current_error = GIF_FRAME_DATA_ERROR;
-                return false;
+                return GIF_FRAME_DATA_ERROR;
         }
         *lzw->stack_pointer++ = lzw->firstcode = lzw->table[1][code];
 
@@ -346,7 +369,7 @@ static bool gif_next_LZW(gif_animation *gif)
                 }
         }
         lzw->oldcode = incode;
-        return true;
+        return GIF_OK;
 }
 
 
@@ -855,6 +878,7 @@ gif_internal_decode_frame(gif_animation *gif,
                           unsigned int frame,
                           bool clear_image)
 {
+        gif_result res;
         unsigned int index = 0;
         unsigned char *gif_data, *gif_end;
         int gif_bytes;
@@ -1091,9 +1115,10 @@ gif_internal_decode_frame(gif_animation *gif,
                 gif->buffer_position = (gif_data - gif->gif_data) + 1;
 
                 /* Initialise the LZW decoding */
-                gif->current_error = gif_initialise_LZW(gif, gif_data[0]);
-                if (gif->current_error != GIF_OK) {
-                        return gif->current_error;
+                res = gif_initialise_LZW(gif->gif_data, gif->buffer_size,
+                                &gif->buffer_position, gif_data[0]);
+                if (res != GIF_OK) {
+                        return res;
                 }
 
                 /* Decompress the data */
@@ -1127,12 +1152,15 @@ gif_internal_decode_frame(gif_animation *gif,
                                                 frame_scanline++;
                                         }
                                 } else {
-                                        if (!gif_next_LZW(gif)) {
+                                        res = gif_next_LZW(gif->gif_data,
+                                                        gif->buffer_size,
+                                                        &gif->buffer_position);
+                                        if (res != GIF_OK) {
                                                 /* Unexpected end of frame, try to recover */
-                                                if (gif->current_error == GIF_END_OF_FRAME) {
+                                                if (res == GIF_END_OF_FRAME) {
                                                         return_value = GIF_OK;
                                                 } else {
-                                                        return_value = gif->current_error;
+                                                        return_value = res;
                                                 }
                                                 goto gif_decode_frame_exit;
                                         }
