@@ -113,8 +113,6 @@ typedef struct gif_animation {
         void *frame_image;
         /** number of times to loop animation */
         int loop_count;
-        /** current error type, or 0 for none */
-        gif_result current_error;
 
         /* Internal members are listed below */
 

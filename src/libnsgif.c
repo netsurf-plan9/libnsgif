@@ -894,7 +894,6 @@ gif_internal_decode_frame(gif_animation *gif,
 
         /* Ensure this frame is supposed to be decoded */
         if (gif->frames[frame].display == false) {
-                gif->current_error = GIF_FRAME_NO_DISPLAY;
                 return GIF_OK;
         }
 
