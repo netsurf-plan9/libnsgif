@@ -41,6 +41,34 @@ struct lzw_read_ctx {
 	uint32_t sb_bit_count;  /**< Bit count in sub-block */
 };
 
+/**
+ * LZW decompression context.
+ */
+struct lzw_ctx {
+	/** Input reading context */
+	struct lzw_read_ctx input;
+};
+
+
+/* Exported function, documented in lzw.h */
+lzw_result lzw_context_create(struct lzw_ctx **ctx)
+{
+	struct lzw_ctx *c = malloc(sizeof(*c));
+	if (c == NULL) {
+		return LZW_NO_MEM;
+	}
+
+	*ctx = c;
+	return LZW_OK;
+}
+
+
+/* Exported function, documented in lzw.h */
+void lzw_context_destroy(struct lzw_ctx *ctx)
+{
+	free(ctx);
+}
+
 
 /**
  * Advance the context to the next sub-block in the input data.
