@@ -135,19 +135,22 @@ static void warning(const char *context, gif_result code)
         fprintf(stderr, "\n");
 }
 
-static void write_ppm(FILE* fh, const char *name, gif_animation *gif)
+static void write_ppm(FILE* fh, const char *name, gif_animation *gif,
+                bool no_write)
 {
         unsigned int i;
         gif_result code;
 
-        fprintf(fh, "P3\n");
-        fprintf(fh, "# %s\n", name);
-        fprintf(fh, "# width                %u \n", gif->width);
-        fprintf(fh, "# height               %u \n", gif->height);
-        fprintf(fh, "# frame_count          %u \n", gif->frame_count);
-        fprintf(fh, "# frame_count_partial  %u \n", gif->frame_count_partial);
-        fprintf(fh, "# loop_count           %u \n", gif->loop_count);
-        fprintf(fh, "%u %u 256\n", gif->width, gif->height * gif->frame_count);
+        if (!no_write) {
+                fprintf(fh, "P3\n");
+                fprintf(fh, "# %s\n", name);
+                fprintf(fh, "# width                %u \n", gif->width);
+                fprintf(fh, "# height               %u \n", gif->height);
+                fprintf(fh, "# frame_count          %u \n", gif->frame_count);
+                fprintf(fh, "# frame_count_partial  %u \n", gif->frame_count_partial);
+                fprintf(fh, "# loop_count           %u \n", gif->loop_count);
+                fprintf(fh, "%u %u 256\n", gif->width, gif->height * gif->frame_count);
+        }
 
         /* decode the frames */
         for (i = 0; i != gif->frame_count; i++) {
@@ -158,17 +161,19 @@ static void write_ppm(FILE* fh, const char *name, gif_animation *gif)
                 if (code != GIF_OK)
                         warning("gif_decode_frame", code);
 
-                fprintf(fh, "# frame %u:\n", i);
-                image = (unsigned char *) gif->frame_image;
-                for (row = 0; row != gif->height; row++) {
-                        for (col = 0; col != gif->width; col++) {
-                                size_t z = (row * gif->width + col) * 4;
-                                fprintf(fh, "%u %u %u ",
-                                        (unsigned char) image[z],
-                                        (unsigned char) image[z + 1],
-                                        (unsigned char) image[z + 2]);
+                if (!no_write) {
+                        fprintf(fh, "# frame %u:\n", i);
+                        image = (unsigned char *) gif->frame_image;
+                        for (row = 0; row != gif->height; row++) {
+                                for (col = 0; col != gif->width; col++) {
+                                        size_t z = (row * gif->width + col) * 4;
+                                        fprintf(fh, "%u %u %u ",
+                                                (unsigned char) image[z],
+                                                (unsigned char) image[z + 1],
+                                                (unsigned char) image[z + 2]);
+                                }
+                                fprintf(fh, "\n");
                         }
-                        fprintf(fh, "\n");
                 }
         }
 
@@ -189,17 +194,28 @@ int main(int argc, char *argv[])
         gif_result code;
         unsigned char *data;
         FILE *outf = stdout;
+        bool no_write = false;
 
         if (argc < 2) {
                 fprintf(stderr, "Usage: %s image.gif [out]\n", argv[0]);
+                fprintf(stderr, "\n");
+                fprintf(stderr, "If [out] is NOWRITE, the gif will be docoded "
+                                "but not output.\n");
+                fprintf(stderr, "Otherwise [out] is an output filename.\n");
+                fprintf(stderr, "When [out] is unset, output is to stdout.\n");
+
                 return 1;
         }
 
         if (argc > 2) {
-                outf = fopen(argv[2], "w+");
-                if (outf == NULL) {
-                        fprintf(stderr, "Unable to open %s for writing\n", argv[2]);
-                        return 2;
+                if (strcmp(argv[2], "NOWRITE") == 0) {
+                        no_write = true;
+                } else {
+                        outf = fopen(argv[2], "w+");
+                        if (outf == NULL) {
+                                fprintf(stderr, "Unable to open %s for writing\n", argv[2]);
+                                return 2;
+                        }
                 }
         }
 
@@ -218,9 +234,9 @@ int main(int argc, char *argv[])
                 }
         } while (code != GIF_OK);
 
-        write_ppm(outf, argv[1], &gif);
+        write_ppm(outf, argv[1], &gif, no_write);
 
-        if (argc > 2) {
+        if (argc > 2 && !no_write) {
                 fclose(outf);
         }
 
