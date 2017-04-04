@@ -301,7 +301,7 @@ lzw_result lzw_decode(struct lzw_ctx *ctx,
 	lzw_result res;
 	uint32_t code_new;
 	uint32_t code_out;
-	struct lzw_dictionary_entry *entry;
+	uint8_t last_value;
 	uint8_t *stack_pos = ctx->stack_base;
 	uint32_t clear_code = ctx->clear_code;
 	uint32_t current_entry = ctx->current_entry;
@@ -322,28 +322,28 @@ lzw_result lzw_decode(struct lzw_ctx *ctx,
 		return LZW_EOI_CODE;
 	}
 
-	if (current_entry >= (1 << LZW_CODE_MAX)) {
-		/* No space in table for new entries, only Clear and
-		 * End of Information codes were allowed. */
-		return LZW_BAD_DATA;
-	}
-
-	entry = table + current_entry;
 	if (code_new > current_entry) {
 		/* Code is invalid */
 		return LZW_BAD_CODE;
 	} else if (code_new < current_entry) {
 		/* Code is in table */
 		code_out = code_new;
-		entry->last_value = table[code_new].first_value;
+		last_value = table[code_new].first_value;
 	} else {
 		/* Code not in table */
 		*stack_pos++ = ctx->previous_code_first;
 		code_out = ctx->previous_code;
-		entry->last_value = ctx->previous_code_first;
+		last_value = ctx->previous_code_first;
 	}
-	entry->first_value    = ctx->previous_code_first;
-	entry->previous_entry = ctx->previous_code;
+
+	/* Add to the dictionary, only if there's space */
+	if (current_entry < (1 << LZW_CODE_MAX)) {
+		struct lzw_dictionary_entry *entry = table + current_entry;
+		entry->last_value     = last_value;
+		entry->first_value    = ctx->previous_code_first;
+		entry->previous_entry = ctx->previous_code;
+		ctx->current_entry++;
+	}
 
 	/* Ensure code size is increased, if needed. */
 	if (current_entry == ctx->current_code_size_max) {
@@ -353,7 +353,6 @@ lzw_result lzw_decode(struct lzw_ctx *ctx,
 					(1 << ctx->current_code_size) - 1;
 		}
 	}
-	ctx->current_entry++;
 
 	ctx->previous_code_first = table[code_new].first_value;
 	ctx->previous_code = code_new;
@@ -362,7 +361,7 @@ lzw_result lzw_decode(struct lzw_ctx *ctx,
 	 * Note, in the case of "code not in table", the last entry of the
 	 * current code has already been placed on the stack above. */
 	while (code_out > clear_code) {
-		entry = table + code_out;
+		struct lzw_dictionary_entry *entry = table + code_out;
 		*stack_pos++ = entry->last_value;
 		code_out = entry->previous_entry;
 	}

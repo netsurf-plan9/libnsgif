@@ -566,7 +566,6 @@ static gif_result gif_error_from_lzw(lzw_result l_res)
                 [LZW_EOI_CODE]  = GIF_FRAME_DATA_ERROR,
                 [LZW_BAD_ICODE] = GIF_FRAME_DATA_ERROR,
                 [LZW_BAD_CODE]  = GIF_FRAME_DATA_ERROR,
-                [LZW_BAD_DATA]  = GIF_FRAME_DATA_ERROR,
         };
         return g_res[l_res];
 }

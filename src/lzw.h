@@ -34,7 +34,6 @@ typedef enum lzw_result {
 	LZW_EOI_CODE,  /**< Error: End of Information code */
 	LZW_BAD_ICODE, /**< Error: Bad initial LZW code */
 	LZW_BAD_CODE,  /**< Error: Bad LZW code */
-	LZW_BAD_DATA,  /**< Error: Bad data */
 } lzw_result;
 
 
