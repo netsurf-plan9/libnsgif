@@ -93,6 +93,8 @@ typedef struct gif_bitmap_callback_vt {
 
 /** GIF animation data */
 typedef struct gif_animation {
+        /** LZW decode context */
+        void *lzw_ctx;
         /** callbacks for bitmap functions */
         gif_bitmap_callback_vt bitmap_callbacks;
         /** pointer to GIF data */
