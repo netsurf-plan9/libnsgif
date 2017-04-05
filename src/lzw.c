@@ -6,6 +6,7 @@
  * Copyright 2017 Michael Drake <michael.drake@codethink.co.uk>
  */
 
+#include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -159,6 +160,8 @@ static inline lzw_result lzw__next_code(
 	uint32_t code = 0;
 	uint8_t current_bit = ctx->sb_bit & 0x7;
 	uint8_t byte_advance = (current_bit + code_size) >> 3;
+
+	assert(byte_advance <= 2);
 
 	if (ctx->sb_bit + code_size < ctx->sb_bit_count) {
 		/* Fast path: code fully inside this sub-block */
