@@ -316,6 +316,7 @@ lzw_result lzw_decode(struct lzw_ctx *ctx,
 		return res;
 	}
 
+	/* Handle the new code */
 	if (code_new == clear_code) {
 		/* Got Clear code */
 		return lzw__clear_codes(ctx, stack_pos_out);
@@ -323,11 +324,11 @@ lzw_result lzw_decode(struct lzw_ctx *ctx,
 	} else if (code_new == ctx->eoi_code) {
 		/* Got End of Information code */
 		return LZW_EOI_CODE;
-	}
 
-	if (code_new > current_entry) {
+	} else if (code_new > current_entry) {
 		/* Code is invalid */
 		return LZW_BAD_CODE;
+
 	} else if (code_new < current_entry) {
 		/* Code is in table */
 		code_out = code_new;
@@ -357,6 +358,7 @@ lzw_result lzw_decode(struct lzw_ctx *ctx,
 		}
 	}
 
+	/* Store details of this code as "previous code" to the context. */
 	ctx->previous_code_first = table[code_new].first_value;
 	ctx->previous_code = code_new;
 
