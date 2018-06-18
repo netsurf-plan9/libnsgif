@@ -163,7 +163,7 @@ static inline lzw_result lzw__next_code(
 
 	assert(byte_advance <= 2);
 
-	if (ctx->sb_bit + code_size < ctx->sb_bit_count) {
+	if (ctx->sb_bit + code_size <= ctx->sb_bit_count) {
 		/* Fast path: code fully inside this sub-block */
 		const uint8_t *data = ctx->sb_data + (ctx->sb_bit >> 3);
 		switch (byte_advance) {
