@@ -230,6 +230,8 @@ int main(int argc, char *argv[])
                 code = gif_initialise(&gif, size, data);
                 if (code != GIF_OK && code != GIF_WORKING) {
                         warning("gif_initialise", code);
+                        gif_finalise(&gif);
+                        free(data);
                         return 1;
                 }
         } while (code != GIF_OK);
