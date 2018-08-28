@@ -6,7 +6,7 @@
 
 # Component settings
 COMPONENT := nsgif
-COMPONENT_VERSION := 0.2.0
+COMPONENT_VERSION := 0.2.1
 # Default to a static library
 COMPONENT_TYPE ?= lib-static
 
