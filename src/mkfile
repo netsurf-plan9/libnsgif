@@ -1,0 +1,17 @@
+</$objtype/mkfile
+
+CC=pcc
+OBJ=libnsgif.$O lzw.$O
+HFILES=../include/libnsgif.h lzw.h utils/log.h 
+CFLAGS=-I ../include -I . -I ../../posix/include -D_BSD_EXTENSION -D_SUSV2_SOURCE
+
+all:V:	libnsgif.$O.a
+
+libnsgif.$O.a: $OBJ $HFILES
+	ar rv libnsgif.$O.a $OBJ
+
+%.$O:	%.c $HFILES
+	$CC $CFLAGS -c -o $target $stem.c
+
+clean:V:
+	rm -f $OBJ libnsgif.$O.a
