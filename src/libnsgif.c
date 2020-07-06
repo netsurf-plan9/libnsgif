@@ -589,7 +589,7 @@ static void gif__record_previous_frame(gif_animation *gif)
         }
 
         if (gif->prev_frame != NULL &&
-            gif->width * gif->height < gif->prev_width * gif->prev_height) {
+            gif->width * gif->height > gif->prev_width * gif->prev_height) {
                 need_alloc = true;
         }
 
